@@ -14,21 +14,27 @@ and the companies you are targeting.
 ## Quick start
 
 ```bash
-npm install && npm run setup && npm run dev
+npm install && npm run dev
 ```
 
 Then open <http://localhost:3000>.
 
-`npm run setup` generates the Prisma client, creates `prisma/dev.db`, and seeds the
-question bank. No login, no cloud account, no API keys — everything runs locally
-against SQLite.
+That is genuinely all. On first run the app creates its own `.env`, creates
+`prisma/dev.db`, and seeds all 588 questions before the dev server starts — it
+prints what it is doing and takes a few seconds. Subsequent runs skip straight to
+the server. No login, no cloud account, no API keys.
+
+`.env` is gitignored (it is machine-local config, not source), which is why the
+first-run guard exists: a fresh clone has no `.env`, and without one Prisma fails
+with `Environment variable not found: DATABASE_URL`.
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Start the app on port 3000 |
-| `npm run setup` | Generate client + create DB + seed (run once) |
+| `npm run dev` | Start the app on port 3000, setting up first if needed |
+| `npm run setup` | Run the first-run setup explicitly (safe to re-run; creates only what is missing) |
 | `npm run db:seed` | Re-seed questions (idempotent upsert) |
-| `npm run db:reset` | Wipe the DB and re-seed from scratch |
+| `npm run db:setup` | Force a full generate + push + seed |
+| `npm run db:reset` | **Destructive** — drop the DB and re-seed from scratch |
 | `npm test` | Scheduler + question-bank test suites |
 | `npm run smoke` | End-to-end check against the real DB |
 | `npm run build` | Production build |
@@ -208,8 +214,22 @@ tests/           Scheduler and bank test suites
 scripts/         smoke.ts — end-to-end run against the real DB
 ```
 
-**Stack:** Next.js 15 (App Router, server actions), TypeScript, Tailwind CSS,
-Prisma, SQLite.
+**Stack:** Next.js 16 (App Router, server actions), TypeScript, Tailwind CSS,
+Prisma 6, SQLite.
+
+### Dependency security
+
+`npm audit` reports 3 high-severity advisories, all in the same chain:
+`deepmerge-ts` → `@prisma/config` → `prisma`. These are **build-tooling only** —
+the Prisma CLI's own config parser, never shipped in the app runtime — and the
+advisory is stack exhaustion when merging a deeply recursive config file that you
+would have to have written yourself.
+
+Clearing them requires Prisma 7, which removes `url` from the datasource block and
+mandates `prisma.config.ts` plus a driver adapter. That is a real refactor for no
+practical security gain here, so it has been deliberately deferred rather than
+taken on. Everything else — including the critical Vitest UI advisory and the
+Next.js/PostCSS advisories — is resolved on the current versions.
 
 ### Designed to grow
 

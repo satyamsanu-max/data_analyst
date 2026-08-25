@@ -1,0 +1,180 @@
+// Interview Prep — data model
+// SQLite for local dev. Swap `provider` to "postgresql" for cloud; no model changes needed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A reference we cite for a question (NeetCode, Striver, LeetCode, GfG, ...).
+model Source {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  homepage  String?
+  kind      String // "roadmap" | "platform" | "book" | "article" | "company-report"
+  notes     String?
+  questions Question[]
+}
+
+/// Topic within a category, e.g. "Sliding Window" (DSA) or "Window Functions" (SQL).
+model Topic {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  name      String
+  category  String // DSA | SQL | Probability | Statistics | ML | Python | Guesstimate
+  /// Relative importance of this topic for Data Analyst / DS interviews (0-100).
+  weight    Int        @default(50)
+  questions Question[]
+}
+
+model Company {
+  id        String            @id @default(cuid())
+  slug      String            @unique
+  name      String
+  bucket    String // "tech" | "product" | "consulting" | "finance" | "other"
+  questions QuestionCompany[]
+}
+
+model QuestionCompany {
+  questionId String
+  companyId  String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, companyId])
+  @@index([companyId])
+}
+
+model Question {
+  id       String @id
+  category String // DSA | SQL | Probability | Statistics | ML | Python | Guesstimate
+  title    String
+
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id])
+
+  /// Reusable technique this question teaches, e.g. "Monotonic Stack".
+  pattern    String?
+  difficulty String // Easy | Medium | Hard
+
+  estimatedMinutes Int
+
+  sourceId  String?
+  source    Source? @relation(fields: [sourceId], references: [id])
+  sourceUrl String?
+  /// Free-text attribution shown in the UI, e.g. "NeetCode 150".
+  sourceNote String?
+
+  /// How often this shows up in real interviews (0-100).
+  frequencyScore Int @default(50)
+  /// How much reusable pattern leverage it gives (0-100).
+  patternValue Int @default(50)
+  /// How much distinct concept surface it covers (0-100).
+  conceptCoverage Int @default(50)
+
+  /// JSON string arrays.
+  concepts      String @default("[]")
+  prerequisites String @default("[]")
+  skillsTested  String @default("[]")
+
+  /// Question body. For DSA we store a short original restatement + link out.
+  prompt      String?
+  hint        String?
+  solution    String?
+  explanation String?
+  /// Guesstimate-specific
+  framework   String?
+  assumptions String?
+  industry    String?
+  year        Int?
+
+  companies QuestionCompany[]
+  progress  UserProgress?
+  tasks     DailyTask[]
+  attempts  Attempt[]
+
+  @@index([category])
+  @@index([topicId])
+  @@index([pattern])
+}
+
+/// Single-user local app: one row, id = "default".
+model UserSettings {
+  id               String  @id @default("default")
+  dailyMinutes     Int     @default(150)
+  difficultyMode   String  @default("balanced") // balanced | easy-first | interview-hard
+  targetRole       String  @default("Data Analyst")
+  /// JSON array of company slugs.
+  targetCompanies  String  @default("[]")
+  theme            String  @default("dark")
+  startDate        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model UserProgress {
+  questionId      String    @id
+  question        Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  status          String    @default("not_started") // not_started|attempted|solved|solved_quickly|solved_with_hint|failed|needs_review|mastered
+  attemptCount    Int       @default(0)
+  failedCount     Int       @default(0)
+  hintUsedCount   Int       @default(0)
+  lastAttemptDate DateTime?
+  /// Seconds, most recent successful/attempted solve.
+  lastSolveSeconds Int?
+  totalSeconds    Int       @default(0)
+  /// 0-100.
+  masteryScore    Int       @default(0)
+  /// Spaced repetition: when this should resurface.
+  nextReviewDate  DateTime?
+  timesOverrun    Int       @default(0)
+}
+
+model DailyPlan {
+  id            String     @id @default(cuid())
+  dayNumber     Int        @unique
+  date          String     @unique // yyyy-mm-dd, local
+  targetMinutes Int
+  plannedMinutes Int
+  status        String     @default("active") // active | completed
+  createdAt     DateTime   @default(now())
+  tasks         DailyTask[]
+}
+
+model DailyTask {
+  id             String    @id @default(cuid())
+  planId         String
+  plan           DailyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question  @relation(fields: [questionId], references: [id])
+  position       Int
+  plannedMinutes Int
+  status         String    @default("pending") // pending | in_progress | done | skipped
+  elapsedSeconds Int       @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  outcome        String? // independent | minor_hint | major_hint | unsolved
+  /// True when the slot was produced by a swap rather than the original generation.
+  swapped        Boolean   @default(false)
+
+  @@unique([planId, position])
+  @@index([questionId])
+}
+
+model Attempt {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  planId     String?
+  createdAt  DateTime @default(now())
+  seconds    Int
+  outcome    String // independent | minor_hint | major_hint | unsolved
+  hintUsed   Boolean  @default(false)
+  overrun    Boolean  @default(false)
+
+  @@index([questionId])
+  @@index([createdAt])
+}

@@ -12,6 +12,7 @@
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,10 +21,27 @@ const envPath = join(root, ".env");
 const envExamplePath = join(root, ".env.example");
 const dbPath = join(root, "prisma", "dev.db");
 
-// Resolve the platform-specific binary rather than using `shell: true`, which
-// Node deprecates when arguments are passed alongside it.
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
-const run = (args) => execFileSync(npx, args, { cwd: root, stdio: "inherit" });
+const require = createRequire(import.meta.url);
+
+/**
+ * Resolve a dependency's CLI entry script from its package.json `bin` field.
+ *
+ * We deliberately do NOT shell out to `npx`: on Windows that means spawning
+ * `npx.cmd`, which Node refuses to run without `shell: true` (EINVAL), and
+ * `shell: true` alongside arguments is itself deprecated. Running the resolved
+ * .js entry point with the current Node binary sidesteps both problems and is
+ * faster, since it skips npx's own resolution step.
+ */
+function binScript(pkg) {
+  const pkgJsonPath = require.resolve(`${pkg}/package.json`, { paths: [root] });
+  const { bin } = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+  const rel = typeof bin === "string" ? bin : bin[pkg];
+  if (!rel) throw new Error(`Could not find a CLI entry point for "${pkg}"`);
+  return join(dirname(pkgJsonPath), rel);
+}
+
+const run = (pkg, args) =>
+  execFileSync(process.execPath, [binScript(pkg), ...args], { cwd: root, stdio: "inherit" });
 
 let didSomething = false;
 
@@ -49,14 +67,14 @@ if (!/^\s*DATABASE_URL\s*=/m.test(readFileSync(envPath, "utf8"))) {
 // 2. Database + seeded question bank
 if (!existsSync(dbPath)) {
   console.log("No local database found — creating and seeding it (first run only)...");
-  run(["prisma", "generate"]);
-  run(["prisma", "db", "push", "--skip-generate"]);
-  run(["tsx", "prisma/seed.ts"]);
+  run("prisma", ["generate"]);
+  run("prisma", ["db", "push", "--skip-generate"]);
+  run("tsx", ["prisma/seed.ts"]);
   didSomething = true;
 } else if (didSomething) {
   // .env was just created but a database already existed: make sure the
   // generated client is present before the app boots.
-  run(["prisma", "generate"]);
+  run("prisma", ["generate"]);
 }
 
 if (didSomething) console.log("Setup complete.\n");

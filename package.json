@@ -19,9 +19,6 @@
     "prebuild": "node scripts/ensure-setup.mjs",
     "presmoke": "node scripts/ensure-setup.mjs"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "class-variance-authority": "^0.7.1",

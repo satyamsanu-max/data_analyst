@@ -104,7 +104,7 @@ model Question {
   year        Int?
 
   companies QuestionCompany[]
-  progress  UserProgress?
+  progress  UserProgress[]
   tasks     DailyTask[]
   attempts  Attempt[]
 
@@ -113,9 +113,38 @@ model Question {
   @@index([pattern])
 }
 
-/// Single-user local app: one row, id = "default".
+/// An account. Passwords are stored only as a scrypt hash + salt, never plaintext.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  settings UserSettings?
+  progress UserProgress[]
+  plans    DailyPlan[]
+  attempts Attempt[]
+  sessions Session[]
+}
+
+/// Server-side session. Revocable, unlike a self-contained token.
+model Session {
+  id        String   @id @default(cuid())
+  /// SHA-256 of the cookie token. The raw token is never stored.
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 model UserSettings {
-  id               String  @id @default("default")
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   dailyMinutes     Int     @default(150)
   difficultyMode   String  @default("balanced") // balanced | easy-first | interview-hard
   targetRole       String  @default("Data Analyst")
@@ -127,7 +156,9 @@ model UserSettings {
 }
 
 model UserProgress {
-  questionId      String    @id
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId      String
   question        Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
   status          String    @default("not_started") // not_started|attempted|solved|solved_quickly|solved_with_hint|failed|needs_review|mastered
   attemptCount    Int       @default(0)
@@ -142,17 +173,25 @@ model UserProgress {
   /// Spaced repetition: when this should resurface.
   nextReviewDate  DateTime?
   timesOverrun    Int       @default(0)
+
+  @@id([userId, questionId])
+  @@index([questionId])
 }
 
 model DailyPlan {
   id            String     @id @default(cuid())
-  dayNumber     Int        @unique
-  date          String     @unique // yyyy-mm-dd, local
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayNumber     Int
+  date          String     // yyyy-mm-dd, local
   targetMinutes Int
   plannedMinutes Int
   status        String     @default("active") // active | completed
   createdAt     DateTime   @default(now())
   tasks         DailyTask[]
+
+  @@unique([userId, date])
+  @@unique([userId, dayNumber])
 }
 
 model DailyTask {
@@ -177,6 +216,8 @@ model DailyTask {
 
 model Attempt {
   id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   planId     String?
@@ -191,6 +232,6 @@ model Attempt {
   /// The submission itself, kept so the attempt history is reviewable.
   submission String?
 
+  @@index([userId, createdAt])
   @@index([questionId])
-  @@index([createdAt])
 }

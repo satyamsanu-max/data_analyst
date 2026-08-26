@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma, getSettings } from "@/lib/db";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { CATEGORY_CLASS, DIFFICULTY_CLASS, cn } from "@/lib/utils";
+import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,13 @@ export default async function CompaniesPage({
   searchParams: Promise<{ company?: string }>;
 }) {
   const { company: selected } = await searchParams;
+  const user = await requireUser();
   const [companies, settings] = await Promise.all([
     prisma.company.findMany({
       orderBy: { name: "asc" },
       include: { _count: { select: { questions: true } } },
     }),
-    getSettings(),
+    getSettings(user.id),
   ]);
 
   const targets: string[] = JSON.parse(settings.targetCompanies || "[]");
@@ -24,7 +26,7 @@ export default async function CompaniesPage({
   const questions = selected
     ? await prisma.question.findMany({
         where: { companies: { some: { company: { slug: selected } } } },
-        include: { topic: true, progress: true },
+        include: { topic: true },
         orderBy: [{ frequencyScore: "desc" }],
         take: 120,
       })

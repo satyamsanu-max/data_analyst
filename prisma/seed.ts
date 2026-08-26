@@ -118,11 +118,8 @@ async function main() {
     if (++n % 100 === 0) console.log(`  ${n}/${ALL_QUESTIONS.length}`);
   }
 
-  await prisma.userSettings.upsert({
-    where: { id: "default" },
-    create: { id: "default" },
-    update: {},
-  });
+  // Settings are created per account on first sign-in, so the seeder no longer
+  // creates a singleton row.
 
   console.log("\nSeed complete.");
   const total = await prisma.question.count();

@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { gradeSql, sqlErrorHint } from "@/lib/verify/sql";
 import { gradeNumeric } from "@/lib/verify/numeric";
 import { runUserQuery } from "@/lib/practice-db";
@@ -12,6 +13,7 @@ export type SqlRunResult =
 
 /** Run a query without grading it — the "just let me look at the data" button. */
 export async function runSqlAction(sql: string): Promise<SqlRunResult> {
+  await requireUser(); // the practice DB is shared, but only for signed-in users
   const res = await runUserQuery(sql);
   if (res.ok) return res;
   return { ok: false, error: sqlErrorHint(res.error) };
@@ -30,6 +32,7 @@ export async function gradeSqlAction(
   questionId: string,
   sql: string,
 ): Promise<SqlGradeResult | { graded: false; error: string }> {
+  await requireUser();
   const q = await prisma.question.findUnique({ where: { id: questionId } });
   if (!q?.solution) return { graded: false, error: "No reference solution stored for this question." };
   if (q.verification !== "sql") {
@@ -70,6 +73,7 @@ export async function gradeNumericAction(
   questionId: string,
   input: string,
 ): Promise<NumericGradeResult | { graded: false; error: string }> {
+  await requireUser();
   const q = await prisma.question.findUnique({ where: { id: questionId } });
   if (!q?.answerSpec) return { graded: false, error: "No answer key stored for this question." };
 

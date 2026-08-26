@@ -1,11 +1,13 @@
 import { prisma, getSettings } from "@/lib/db";
 import { SettingsForm } from "@/components/settings-form";
+import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  const user = await requireUser();
   const [settings, companies] = await Promise.all([
-    getSettings(),
+    getSettings(user.id),
     prisma.company.findMany({ orderBy: [{ bucket: "asc" }, { name: "asc" }] }),
   ]);
 

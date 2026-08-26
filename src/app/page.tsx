@@ -5,14 +5,16 @@ import { formatDuration, overview } from "@/lib/stats";
 import { getSettings } from "@/lib/db";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Meter, Stat } from "@/components/ui";
 import { CATEGORY_CLASS, DIFFICULTY_CLASS } from "@/lib/utils";
+import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const user = await requireUser();
   const [plan, stats, settings] = await Promise.all([
-    getOrCreateTodayPlan(),
-    overview(),
-    getSettings(),
+    getOrCreateTodayPlan(user.id),
+    overview(user.id),
+    getSettings(user.id),
   ]);
 
   const cards = toTaskCards(plan);

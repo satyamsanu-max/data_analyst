@@ -1,10 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
 import { CATEGORY_CLASS, CATEGORY_FROM_SLUG, DIFFICULTY_CLASS, STATUS_LABEL, cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+/** Every status that counts as "you have solved this". */
+const SOLVED_STATUSES = new Set(["solved", "solved_quickly", "solved_with_hint", "mastered"]);
+
+/**
+ * The "Solved" chip must mean the same thing as the solved COUNT above it.
+ * Matching the literal string alone made the header say "1 solved" while the
+ * filter returned nothing, because the row was actually "solved_quickly".
+ */
+function matchesStatus(status: string, filter: string): boolean {
+  if (filter === "solved") return SOLVED_STATUSES.has(status) && status !== "mastered";
+  return status === filter;
+}
 
 type Props = {
   params: Promise<{ category: string }>;
@@ -16,6 +30,7 @@ export default async function BankPage({ params, searchParams }: Props) {
   const filters = await searchParams;
   const category = CATEGORY_FROM_SLUG[slug];
   if (!category) notFound();
+  const user = await requireUser();
 
   const where = {
     category,
@@ -27,7 +42,12 @@ export default async function BankPage({ params, searchParams }: Props) {
   const [questions, topics, total] = await Promise.all([
     prisma.question.findMany({
       where,
-      include: { topic: true, source: true, progress: true, companies: { include: { company: true } } },
+      include: {
+        topic: true,
+        source: true,
+        progress: { where: { userId: user.id } },
+        companies: { include: { company: true } },
+      },
       orderBy: [{ frequencyScore: "desc" }, { title: "asc" }],
       take: 400,
     }),
@@ -36,13 +56,10 @@ export default async function BankPage({ params, searchParams }: Props) {
   ]);
 
   const filtered = filters.status
-    ? questions.filter((q) => (q.progress?.status ?? "not_started") === filters.status)
+    ? questions.filter((q) => matchesStatus(q.progress[0]?.status ?? "not_started", filters.status!))
     : questions;
 
-  const solved = questions.filter((q) => {
-    const s = q.progress?.status ?? "not_started";
-    return s === "solved" || s === "solved_quickly" || s === "solved_with_hint" || s === "mastered";
-  }).length;
+  const solved = questions.filter((q) => SOLVED_STATUSES.has(q.progress[0]?.status ?? "")).length;
 
   const linkFor = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
@@ -107,8 +124,8 @@ export default async function BankPage({ params, searchParams }: Props) {
           </p>
         )}
         {filtered.map((q) => {
-          const status = q.progress?.status ?? "not_started";
-          const mastery = q.progress?.masteryScore ?? 0;
+          const status = q.progress[0]?.status ?? "not_started";
+          const mastery = q.progress[0]?.masteryScore ?? 0;
           return (
             <Link
               key={q.id}
@@ -133,7 +150,7 @@ export default async function BankPage({ params, searchParams }: Props) {
                   <span>{q.topic.name}</span>
                   {q.pattern && <span>· {q.pattern}</span>}
                   <span>· freq {q.frequencyScore}</span>
-                  {q.progress && q.progress.attemptCount > 0 && <span>· mastery {mastery}%</span>}
+                  {(q.progress[0]?.attemptCount ?? 0) > 0 && <span>· mastery {mastery}%</span>}
                 </div>
               </div>
               <Badge className={DIFFICULTY_CLASS[q.difficulty]}>{q.difficulty}</Badge>

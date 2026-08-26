@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui";
+import { signOutAction } from "@/app/auth-actions";
+
+export type NavUser = { id: string; email: string; name: string | null };
 
 const NAV = [
   { href: "/", label: "Dashboard" },
@@ -25,18 +28,15 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ] as const;
 
-function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  useEffect(() => {
-    const stored = (localStorage.getItem("theme") as "dark" | "light" | null) ?? "dark";
-    setTheme(stored);
-  }, []);
+function ThemeToggle({ initialTheme }: { initialTheme: "dark" | "light" }) {
+  const [theme, setTheme] = useState<"dark" | "light">(initialTheme);
 
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    localStorage.setItem("theme", next);
+    // Cookie, not localStorage, so the server can render the right class and
+    // there is no flash on the next navigation.
+    document.cookie = `theme=${next}; path=/; max-age=31536000; samesite=lax`;
     document.documentElement.classList.toggle("dark", next === "dark");
   }
 
@@ -47,7 +47,13 @@ function ThemeToggle() {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  initialTheme,
+  user,
+}: {
+  initialTheme: "dark" | "light";
+  user: NavUser;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -98,8 +104,26 @@ export function Sidebar() {
             )}
           </nav>
 
-          <div className="mt-4 border-t border-border pt-3">
-            <ThemeToggle />
+          <div className="mt-4 space-y-1 border-t border-border pt-3">
+            <div className="px-3 pb-1">
+              <div className="truncate text-sm font-medium" title={user.name ?? user.email}>
+                {user.name ?? user.email.split("@")[0]}
+              </div>
+              <div className="truncate text-xs text-muted-foreground" title={user.email}>
+                {user.email}
+              </div>
+            </div>
+            <ThemeToggle initialTheme={initialTheme} />
+            <form action={signOutAction}>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-muted-foreground"
+              >
+                Sign out
+              </Button>
+            </form>
           </div>
         </div>
       </aside>

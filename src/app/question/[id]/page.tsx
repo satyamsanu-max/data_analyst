@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
 import { SolutionReveal } from "@/components/solution-reveal";
-import { AnswerPanel, VerificationBadge } from "@/components/answer-panel";
+import { VerificationBadge } from "@/components/answer-panel";
+import { PracticePanel } from "@/components/practice-panel";
 import { PRACTICE_DDL } from "@/lib/practice-db";
 import {
   CATEGORY_CLASS,
@@ -26,21 +28,22 @@ function parseArr(s: string): string[] {
 
 export default async function QuestionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await requireUser();
   const q = await prisma.question.findUnique({
     where: { id },
     include: {
       topic: true,
       source: true,
-      progress: true,
+      progress: { where: { userId: user.id } },
       companies: { include: { company: true } },
-      attempts: { orderBy: { createdAt: "desc" }, take: 8 },
+      attempts: { where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 8 },
     },
   });
   if (!q) notFound();
 
   const concepts = parseArr(q.concepts);
   const skills = parseArr(q.skillsTested);
-  const progress = q.progress;
+  const progress = q.progress[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -119,18 +122,11 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
                 <VerificationBadge verification={q.verification} />
               </CardHeader>
               <CardContent>
-                <AnswerPanel
+                <PracticePanel
                   questionId={q.id}
                   verification={q.verification}
                   schema={q.category === "SQL" ? PRACTICE_DDL.trim() : undefined}
                 />
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Practising here does not log an attempt. Start this question from{" "}
-                  <Link href="/today" className="text-primary hover:underline">
-                    today&rsquo;s plan
-                  </Link>{" "}
-                  to have the result count toward mastery.
-                </p>
               </CardContent>
             </Card>
           )}

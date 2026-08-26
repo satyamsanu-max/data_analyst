@@ -93,7 +93,10 @@ export function TaskCard({ task }: { task: TaskCardData }) {
     base + (startedAt ? Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)) : 0);
 
   const [running, setRunning] = useState(task.startedAt !== null && task.status !== "done");
-  const [elapsed, setElapsed] = useState(() => liveElapsed(task.elapsedSeconds, task.startedAt));
+  // Seed from the accumulated value only. Reading the clock during render would
+  // give the server and the client different numbers and break hydration; the
+  // open segment is folded in by the effect below, after mount.
+  const [elapsed, setElapsed] = useState(task.elapsedSeconds);
   const [showHint, setShowHint] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -102,6 +105,13 @@ export function TaskCard({ task }: { task: TaskCardData }) {
   const [workOpen, setWorkOpen] = useState(false);
   const [, startTransition] = useTransition();
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Once mounted, fold in the segment that has been running since `startedAt`.
+  // This is what makes the clock survive a reload.
+  useEffect(() => {
+    setElapsed(liveElapsed(task.elapsedSeconds, task.startedAt));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.elapsedSeconds, task.startedAt]);
 
   useEffect(() => {
     if (running) {

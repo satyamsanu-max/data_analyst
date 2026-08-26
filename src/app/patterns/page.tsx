@@ -1,6 +1,7 @@
 import { patternCoverage } from "@/lib/stats";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,8 @@ function Bar({ label, value, right }: { label: string; value: number; right: str
 }
 
 export default async function PatternsPage() {
-  const { topics, patterns } = await patternCoverage();
+  const user = await requireUser();
+  const { topics, patterns } = await patternCoverage(user.id);
 
   return (
     <div className="space-y-6">

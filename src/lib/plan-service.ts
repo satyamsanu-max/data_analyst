@@ -1,4 +1,4 @@
-import { prisma, getSettings } from "./db";
+import { prisma, getSettings, progressKey } from "./db";
 import {
   findSwapCandidates,
   generatePlan,
@@ -25,11 +25,12 @@ function parseJson<T>(s: string, fallback: T): T {
 }
 
 /** Load the whole bank plus the user's progress, shaped for the scheduler. */
-export async function loadSchedulerQuestions(): Promise<SchedulerQuestion[]> {
+export async function loadSchedulerQuestions(userId: string): Promise<SchedulerQuestion[]> {
   const rows = await prisma.question.findMany({
     include: {
       topic: true,
-      progress: true,
+      // Only THIS user's progress row, so one account can never see another's.
+      progress: { where: { userId } },
       companies: { include: { company: true } },
     },
   });
@@ -46,24 +47,24 @@ export async function loadSchedulerQuestions(): Promise<SchedulerQuestion[]> {
     patternValue: q.patternValue,
     conceptCoverage: q.conceptCoverage,
     companies: q.companies.map((c) => c.company.slug),
-    status: q.progress?.status ?? "not_started",
-    masteryScore: q.progress?.masteryScore ?? 0,
-    attemptCount: q.progress?.attemptCount ?? 0,
-    failedCount: q.progress?.failedCount ?? 0,
-    timesOverrun: q.progress?.timesOverrun ?? 0,
-    lastAttemptAt: q.progress?.lastAttemptDate ?? null,
-    nextReviewAt: q.progress?.nextReviewDate ?? null,
+    status: q.progress[0]?.status ?? "not_started",
+    masteryScore: q.progress[0]?.masteryScore ?? 0,
+    attemptCount: q.progress[0]?.attemptCount ?? 0,
+    failedCount: q.progress[0]?.failedCount ?? 0,
+    timesOverrun: q.progress[0]?.timesOverrun ?? 0,
+    lastAttemptAt: q.progress[0]?.lastAttemptDate ?? null,
+    nextReviewAt: q.progress[0]?.nextReviewDate ?? null,
   }));
 }
 
 /** Mastery rolled up by pattern and by topic, for the scheduler and the dashboard. */
-export async function loadMasteryMaps() {
+export async function loadMasteryMaps(userId: string) {
   const rows = await prisma.question.findMany({
     select: {
       pattern: true,
       topicId: true,
       topic: { select: { slug: true, name: true, category: true } },
-      progress: { select: { masteryScore: true, attemptCount: true } },
+      progress: { where: { userId }, select: { masteryScore: true, attemptCount: true } },
     },
   });
 
@@ -72,15 +73,15 @@ export async function loadMasteryMaps() {
     .map((r) => ({
       key: r.pattern!,
       label: r.pattern!,
-      mastery: r.progress?.masteryScore ?? 0,
-      attempted: (r.progress?.attemptCount ?? 0) > 0,
+      mastery: r.progress[0]?.masteryScore ?? 0,
+      attempted: (r.progress[0]?.attemptCount ?? 0) > 0,
     }));
 
   const topicRows = rows.map((r) => ({
     key: r.topic.slug,
     label: r.topic.name,
-    mastery: r.progress?.masteryScore ?? 0,
-    attempted: (r.progress?.attemptCount ?? 0) > 0,
+    mastery: r.progress[0]?.masteryScore ?? 0,
+    attempted: (r.progress[0]?.attemptCount ?? 0) > 0,
   }));
 
   const patterns = rollUpMastery(patternRows);
@@ -94,9 +95,12 @@ export async function loadMasteryMaps() {
   return { patterns, topics, patternMastery, topicMastery };
 }
 
-export async function schedulerOptions(overrides: Partial<SchedulerOptions> = {}): Promise<SchedulerOptions> {
-  const settings = await getSettings();
-  const { patternMastery, topicMastery } = await loadMasteryMaps();
+export async function schedulerOptions(
+  userId: string,
+  overrides: Partial<SchedulerOptions> = {},
+): Promise<SchedulerOptions> {
+  const settings = await getSettings(userId);
+  const { patternMastery, topicMastery } = await loadMasteryMaps(userId);
   return {
     dailyMinutes: settings.dailyMinutes,
     difficultyMode: settings.difficultyMode as SchedulerOptions["difficultyMode"],
@@ -108,8 +112,8 @@ export async function schedulerOptions(overrides: Partial<SchedulerOptions> = {}
   };
 }
 
-export async function dayNumberFor(date = new Date()): Promise<number> {
-  const settings = await getSettings();
+export async function dayNumberFor(userId: string, date = new Date()): Promise<number> {
+  const settings = await getSettings(userId);
   const start = new Date(settings.startDate);
   start.setHours(0, 0, 0, 0);
   const d = new Date(date);
@@ -117,33 +121,42 @@ export async function dayNumberFor(date = new Date()): Promise<number> {
   return Math.max(1, Math.floor((d.getTime() - start.getTime()) / 86_400_000) + 1);
 }
 
-const planInclude = {
-  tasks: {
-    orderBy: { position: "asc" },
-    include: {
-      question: {
-        include: { topic: true, source: true, companies: { include: { company: true } }, progress: true },
+const planIncludeFor = (userId: string) =>
+  ({
+    tasks: {
+      orderBy: { position: "asc" as const },
+      include: {
+        question: {
+          include: {
+            topic: true,
+            source: true,
+            companies: { include: { company: true } },
+            progress: { where: { userId } },
+          },
+        },
       },
     },
-  },
-} as const;
+  }) satisfies Parameters<typeof prisma.dailyPlan.findUnique>[0]["include"];
 
 export type FullPlan = NonNullable<Awaited<ReturnType<typeof findPlan>>>;
 
-export async function findPlan(date: string) {
-  return prisma.dailyPlan.findUnique({ where: { date }, include: planInclude });
+export async function findPlan(userId: string, date: string) {
+  return prisma.dailyPlan.findUnique({
+    where: { userId_date: { userId, date } },
+    include: planIncludeFor(userId),
+  });
 }
 
 /** Today's plan, generating it on first visit of the day. */
-export async function getOrCreateTodayPlan(force = false) {
+export async function getOrCreateTodayPlan(userId: string, force = false) {
   const date = dateKey();
-  const existing = await findPlan(date);
+  const existing = await findPlan(userId, date);
   if (existing && !force) return existing;
 
   const [questions, opts, dayNumber] = await Promise.all([
-    loadSchedulerQuestions(),
-    schedulerOptions(),
-    dayNumberFor(),
+    loadSchedulerQuestions(userId),
+    schedulerOptions(userId),
+    dayNumberFor(userId),
   ]);
 
   const generated = generatePlan(questions, opts);
@@ -154,6 +167,7 @@ export async function getOrCreateTodayPlan(force = false) {
 
   await prisma.dailyPlan.create({
     data: {
+      userId,
       dayNumber,
       date,
       targetMinutes: opts.dailyMinutes,
@@ -168,29 +182,53 @@ export async function getOrCreateTodayPlan(force = false) {
     },
   });
 
-  return (await findPlan(date))!;
+  return (await findPlan(userId, date))!;
 }
 
 /** Recompute the plan for today from scratch, discarding untouched tasks. */
-export async function regenerateTodayPlan() {
-  return getOrCreateTodayPlan(true);
+export async function regenerateTodayPlan(userId: string) {
+  return getOrCreateTodayPlan(userId, true);
+}
+
+/**
+ * Load a plan the caller actually owns.
+ * Scoping by id AND userId means a guessed id from another account resolves to
+ * nothing rather than to somebody else's data.
+ */
+async function ownedPlan(userId: string, planId: string) {
+  const plan = await prisma.dailyPlan.findFirst({
+    where: { id: planId, userId },
+    include: { tasks: true },
+  });
+  if (!plan) throw new Error("Plan not found");
+  return plan;
+}
+
+/** Load a task the caller actually owns, via its parent plan. */
+async function ownedTask(userId: string, taskId: string) {
+  const task = await prisma.dailyTask.findFirst({
+    where: { id: taskId, plan: { userId } },
+    include: { question: true, plan: true },
+  });
+  if (!task) throw new Error("Task not found");
+  return task;
 }
 
 export async function getSwapOptions(
+  userId: string,
   planId: string,
   taskId: string,
   targetCategories?: string[],
   mode?: SwapRequest["mode"],
 ) {
-  const plan = await prisma.dailyPlan.findUnique({
-    where: { id: planId },
-    include: { tasks: true },
-  });
-  if (!plan) throw new Error("Plan not found");
+  const plan = await ownedPlan(userId, planId);
   const task = plan.tasks.find((t) => t.id === taskId);
   if (!task) throw new Error("Task not found");
 
-  const [questions, opts] = await Promise.all([loadSchedulerQuestions(), schedulerOptions()]);
+  const [questions, opts] = await Promise.all([
+    loadSchedulerQuestions(userId),
+    schedulerOptions(userId),
+  ]);
 
   const current = plan.tasks.map((t) => ({
     questionId: t.questionId,
@@ -215,9 +253,13 @@ export async function getSwapOptions(
   };
 }
 
-export async function applySwap(planId: string, taskId: string, newQuestionId: string) {
-  const plan = await prisma.dailyPlan.findUnique({ where: { id: planId }, include: { tasks: true } });
-  if (!plan) throw new Error("Plan not found");
+export async function applySwap(
+  userId: string,
+  planId: string,
+  taskId: string,
+  newQuestionId: string,
+) {
+  const plan = await ownedPlan(userId, planId);
   const task = plan.tasks.find((t) => t.id === taskId);
   if (!task) throw new Error("Task not found");
   if (task.status === "done") throw new Error("That task is already complete");
@@ -259,26 +301,25 @@ export async function applySwap(planId: string, taskId: string, newQuestionId: s
   );
   await prisma.dailyPlan.update({ where: { id: planId }, data: { plannedMinutes: newTotal } });
 
-  return findPlan(plan.date);
+  return findPlan(userId, plan.date);
 }
 
 /** Record an attempt, update mastery and spaced repetition, close out the task. */
 export async function completeTask(
+  userId: string,
   taskId: string,
   outcome: Outcome,
   graded?: { verified: boolean; submission?: string },
 ) {
-  const task = await prisma.dailyTask.findUnique({
-    where: { id: taskId },
-    include: { question: true, plan: true },
-  });
-  if (!task) throw new Error("Task not found");
+  const task = await ownedTask(userId, taskId);
 
   // Solve time comes from the server-side clock, not from whatever the browser
   // reports, so a reload or a closed tab cannot lose or fabricate it.
   const seconds = liveElapsedSeconds(task);
 
-  const prior = (await prisma.userProgress.findUnique({ where: { questionId: task.questionId } })) ?? {
+  const prior = (await prisma.userProgress.findUnique({
+    where: progressKey(userId, task.questionId),
+  })) ?? {
     ...EMPTY_PROGRESS,
     questionId: task.questionId,
   };
@@ -305,12 +346,13 @@ export async function completeTask(
 
   await prisma.$transaction([
     prisma.userProgress.upsert({
-      where: { questionId: task.questionId },
-      create: { questionId: task.questionId, ...next },
+      where: progressKey(userId, task.questionId),
+      create: { userId, questionId: task.questionId, ...next },
       update: next,
     }),
     prisma.attempt.create({
       data: {
+        userId,
         questionId: task.questionId,
         planId: task.planId,
         seconds,
@@ -360,9 +402,8 @@ export function liveElapsedSeconds(task: { elapsedSeconds: number; startedAt: Da
   return task.elapsedSeconds + Math.max(0, running);
 }
 
-export async function startTask(taskId: string) {
-  const task = await prisma.dailyTask.findUnique({ where: { id: taskId } });
-  if (!task) throw new Error("Task not found");
+export async function startTask(userId: string, taskId: string) {
+  const task = await ownedTask(userId, taskId);
   if (task.startedAt) return task; // already running; do not restart the segment
 
   return prisma.dailyTask.update({
@@ -372,9 +413,8 @@ export async function startTask(taskId: string) {
 }
 
 /** Close the current run segment, folding its time into the accumulated total. */
-export async function pauseTask(taskId: string) {
-  const task = await prisma.dailyTask.findUnique({ where: { id: taskId } });
-  if (!task) throw new Error("Task not found");
+export async function pauseTask(userId: string, taskId: string) {
+  const task = await ownedTask(userId, taskId);
   if (!task.startedAt) return task; // already paused
 
   return prisma.dailyTask.update({
@@ -383,9 +423,75 @@ export async function pauseTask(taskId: string) {
   });
 }
 
-export async function skipTask(taskId: string) {
+export async function skipTask(userId: string, taskId: string) {
+  await ownedTask(userId, taskId);
   return prisma.dailyTask.update({
     where: { id: taskId },
     data: { status: "skipped", startedAt: null },
   });
+}
+
+/**
+ * Record an attempt made OUTSIDE the daily plan — i.e. answering a question
+ * directly from its own page.
+ *
+ * Previously this path recorded nothing, so solving a probability, statistics
+ * or guesstimate question there left mastery at 0% and the status at "Not
+ * started". Practice you actually did should always count.
+ */
+export async function recordPracticeAttempt(
+  userId: string,
+  questionId: string,
+  outcome: Outcome,
+  seconds: number,
+  graded?: { verified: boolean; submission?: string },
+) {
+  const question = await prisma.question.findUnique({ where: { id: questionId } });
+  if (!question) throw new Error("Question not found");
+
+  const prior = (await prisma.userProgress.findUnique({
+    where: progressKey(userId, questionId),
+  })) ?? { ...EMPTY_PROGRESS, userId, questionId };
+
+  const next = applyAttempt(
+    {
+      status: prior.status,
+      attemptCount: prior.attemptCount,
+      failedCount: prior.failedCount,
+      hintUsedCount: prior.hintUsedCount,
+      masteryScore: prior.masteryScore,
+      totalSeconds: prior.totalSeconds,
+      timesOverrun: prior.timesOverrun,
+    },
+    {
+      outcome,
+      seconds,
+      estimatedMinutes: question.estimatedMinutes,
+      verified: graded?.verified ?? false,
+    },
+  );
+
+  const overran = seconds > question.estimatedMinutes * 60 * 1.5;
+
+  await prisma.$transaction([
+    prisma.userProgress.upsert({
+      where: progressKey(userId, questionId),
+      create: { userId, questionId, ...next },
+      update: next,
+    }),
+    prisma.attempt.create({
+      data: {
+        userId,
+        questionId,
+        seconds: Math.max(0, Math.round(seconds)),
+        outcome,
+        hintUsed: outcome === "minor_hint" || outcome === "major_hint",
+        overrun: overran,
+        verified: graded?.verified ?? false,
+        submission: graded?.submission ?? null,
+      },
+    }),
+  ]);
+
+  return { progress: next, overran };
 }

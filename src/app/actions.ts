@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma, SETTINGS_ID } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import {
   applySwap,
   completeTask,
   getSwapOptions,
   pauseTask,
+  recordPracticeAttempt,
   regenerateTodayPlan,
   skipTask,
   startTask,
@@ -27,7 +29,8 @@ export type ActionResult<T = undefined> =
 
 export async function regeneratePlanAction(): Promise<ActionResult> {
   try {
-    await regenerateTodayPlan();
+    const user = await requireUser();
+    await regenerateTodayPlan(user.id);
     refresh();
     return { ok: true };
   } catch (e) {
@@ -43,7 +46,8 @@ export async function swapOptionsDetailedAction(
   mode?: "similar" | "easier" | "harder" | "shorter",
 ) {
   try {
-    const result = await getSwapOptions(planId, taskId, targetCategories, mode);
+    const user = await requireUser();
+    const result = await getSwapOptions(user.id, planId, taskId, targetCategories, mode);
     const ids = result.candidates.map((c) => c.question.id);
     const details = await prisma.question.findMany({
       where: { id: { in: ids } },
@@ -85,7 +89,8 @@ export async function applySwapAction(
   questionId: string,
 ): Promise<ActionResult> {
   try {
-    await applySwap(planId, taskId, questionId);
+    const user = await requireUser();
+    await applySwap(user.id, planId, taskId, questionId);
     refresh();
     return { ok: true };
   } catch (e) {
@@ -95,7 +100,8 @@ export async function applySwapAction(
 
 export async function startTaskAction(taskId: string): Promise<ActionResult> {
   try {
-    await startTask(taskId);
+    const user = await requireUser();
+    await startTask(user.id, taskId);
     refresh();
     return { ok: true };
   } catch (e) {
@@ -113,7 +119,8 @@ export async function completeTaskAction(
   graded?: { verified: boolean; submission?: string },
 ): Promise<ActionResult<{ mastery: number; overran: boolean }>> {
   try {
-    const { progress, overran } = await completeTask(taskId, outcome, graded);
+    const user = await requireUser();
+    const { progress, overran } = await completeTask(user.id, taskId, outcome, graded);
     refresh();
     return { ok: true, data: { mastery: progress.masteryScore, overran } };
   } catch (e) {
@@ -123,7 +130,8 @@ export async function completeTaskAction(
 
 export async function pauseTaskAction(taskId: string): Promise<ActionResult> {
   try {
-    await pauseTask(taskId);
+    const user = await requireUser();
+    await pauseTask(user.id, taskId);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not pause the timer" };
@@ -132,7 +140,8 @@ export async function pauseTaskAction(taskId: string): Promise<ActionResult> {
 
 export async function skipTaskAction(taskId: string): Promise<ActionResult> {
   try {
-    await skipTask(taskId);
+    const user = await requireUser();
+    await skipTask(user.id, taskId);
     refresh();
     return { ok: true };
   } catch (e) {
@@ -153,8 +162,9 @@ export async function saveSettingsAction(input: SettingsInput): Promise<ActionRe
     if (!allowedMinutes.includes(input.dailyMinutes)) {
       return { ok: false, error: "Daily study time must be 90, 120, 150 or 180 minutes." };
     }
+    const user = await requireUser();
     await prisma.userSettings.update({
-      where: { id: SETTINGS_ID },
+      where: { userId: user.id },
       data: {
         dailyMinutes: input.dailyMinutes,
         difficultyMode: input.difficultyMode,
@@ -172,15 +182,39 @@ export async function saveSettingsAction(input: SettingsInput): Promise<ActionRe
 
 export async function resetProgressAction(): Promise<ActionResult> {
   try {
+    const user = await requireUser();
+    // Scoped to the caller: resetting your own progress must never touch anyone else's.
     await prisma.$transaction([
-      prisma.attempt.deleteMany({}),
-      prisma.dailyTask.deleteMany({}),
-      prisma.dailyPlan.deleteMany({}),
-      prisma.userProgress.deleteMany({}),
+      prisma.attempt.deleteMany({ where: { userId: user.id } }),
+      prisma.dailyTask.deleteMany({ where: { plan: { userId: user.id } } }),
+      prisma.dailyPlan.deleteMany({ where: { userId: user.id } }),
+      prisma.userProgress.deleteMany({ where: { userId: user.id } }),
     ]);
     refresh();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not reset progress" };
+  }
+}
+
+/**
+ * Log an attempt made from a question's own page, outside the daily plan.
+ * This is what makes practising a probability/statistics/guesstimate question
+ * actually move mastery instead of silently doing nothing.
+ */
+export async function recordPracticeAttemptAction(
+  questionId: string,
+  outcome: Outcome,
+  seconds: number,
+  graded?: { verified: boolean; submission?: string },
+): Promise<ActionResult<{ mastery: number }>> {
+  try {
+    const user = await requireUser();
+    const { progress } = await recordPracticeAttempt(user.id, questionId, outcome, seconds, graded);
+    refresh();
+    revalidatePath(`/question/${questionId}`);
+    return { ok: true, data: { mastery: progress.masteryScore } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not record the attempt" };
   }
 }

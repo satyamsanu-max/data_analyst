@@ -22,7 +22,10 @@ Then open <http://localhost:3000>.
 That is genuinely all. On first run the app creates its own `.env`, creates
 `prisma/dev.db`, and seeds all 588 questions before the dev server starts — it
 prints what it is doing and takes a few seconds. Subsequent runs skip straight to
-the server. No login, no cloud account, no API keys.
+the server. No cloud account, no API keys.
+
+Then create an account at `/signup`. Every account gets its own plan, streak,
+mastery and settings.
 
 `.env` is gitignored (it is machine-local config, not source), which is why the
 first-run guard exists: a fresh clone has no `.env`, and without one Prisma fails
@@ -38,6 +41,7 @@ with `Environment variable not found: DATABASE_URL`.
 | `npm test` | Scheduler, question-bank and grading test suites |
 | `npm run smoke` | End-to-end plan/swap check against the real DB |
 | `npm run smoke:verify` | End-to-end grading check (SQL judge, numeric, timer) |
+| `npm run smoke:isolation` | Proves two accounts cannot see or damage each other's data |
 | `npm run build` | Production build |
 
 ---
@@ -231,6 +235,44 @@ which matters, because the intended workflow for DSA is "leave this page and go
 solve on LeetCode". Solve time is read from that clock when you complete a task,
 so the browser cannot lose it or fake it.
 
+## Accounts
+
+The app is multi-user. It is built for a small group — on the order of 100–200
+people — so it uses server-side sessions and a single shared question bank rather
+than anything more elaborate.
+
+**Credentials.** Passwords are hashed with scrypt (Node's own implementation) using
+a random 16-byte salt per password, and compared in constant time. The plaintext
+is never stored or logged. Password rules are enforced server-side, not just in
+the form.
+
+**Sessions.** Signing in creates a row in `Session` and sets an httpOnly,
+sameSite=lax cookie holding a 32-byte random token. The database stores only the
+SHA-256 of that token, so a database leak does not hand over live sessions. Sessions
+expire after 30 days and can be revoked by deleting the row — which a self-contained
+JWT could not offer.
+
+**Isolation.** Every user-owned table carries a `userId`: `UserSettings`,
+`UserProgress` (keyed `[userId, questionId]`), `DailyPlan` (unique per
+`[userId, date]`), and `Attempt`. Reads are scoped at the query, and writes go
+through `ownedPlan`/`ownedTask` helpers that match on id **and** owner — so a
+guessed id from another account resolves to nothing rather than to somebody
+else's row.
+
+`requireUser()` throws rather than returning null, so a forgotten check fails
+loudly instead of silently leaking. The middleware redirect is only a convenience
+to avoid rendering an app shell for a signed-out visitor; it is not the security
+boundary, because the edge runtime cannot reach the database to validate a token.
+
+`npm run smoke:isolation` creates two accounts, has one do work, and asserts the
+other sees nothing — including that cross-account start/complete/swap attempts are
+all refused.
+
+**What is deliberately not here:** email verification, password reset, rate
+limiting on sign-in, and OAuth. For a private group of 100–200 these are
+reasonable omissions; for a public deployment, rate limiting and password reset
+are the first two to add.
+
 ## Pages
 
 | Route | What it shows |
@@ -244,6 +286,7 @@ so the browser cannot lose it or fake it.
 | `/review` | Rolling 7-day review and next week's emphasis |
 | `/companies` | Browse by company; see what your targets are weighted toward |
 | `/settings` | Daily minutes, difficulty mode, target role, target companies |
+| `/signin`, `/signup` | Account creation and sign-in |
 
 The session timer records real solve time per question. Start, pause, resume,
 complete, hint, give up — all of it is logged and all of it feeds the scheduler.
@@ -300,13 +343,15 @@ Next.js/PostCSS advisories — is resolved on the current versions.
 ## Verification
 
 ```bash
-npm test              # 73 tests: scheduler constraints, bank integrity, grading
+npm test              # 81 tests: scheduler, bank integrity, grading, credentials
 npm run smoke         # regenerate -> attempt -> swap -> over-budget rejection
 npm run smoke:verify  # SQL judge, numeric grading, verified attempts, timer persistence
 ```
 
 `smoke` prints the generated plan, exercises a completion, a same-category swap, a
 cross-category swap, and confirms an over-budget swap is refused.
+
+`smoke:isolation` proves two accounts stay separate.
 
 `smoke:verify` submits a correct query, a wrong query and a `DELETE` to the SQL
 judge, checks numeric grading both ways, and proves the timer survives a reload

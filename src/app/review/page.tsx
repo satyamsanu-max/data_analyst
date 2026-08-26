@@ -1,11 +1,16 @@
 import { formatDuration, weeklyReview } from "@/lib/stats";
 import { Card, CardContent, CardHeader, CardTitle, Meter, Stat } from "@/components/ui";
 import { OUTCOME_LABELS, type Outcome } from "@/lib/mastery";
+import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReviewPage() {
-  const [thisWeek, lastWeek] = await Promise.all([weeklyReview(0), weeklyReview(1)]);
+  const user = await requireUser();
+  const [thisWeek, lastWeek] = await Promise.all([
+    weeklyReview(user.id, 0),
+    weeklyReview(user.id, 1),
+  ]);
 
   const delta = thisWeek.totalSeconds - lastWeek.totalSeconds;
   const completionPct = thisWeek.planned

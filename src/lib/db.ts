@@ -10,10 +10,19 @@ export const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-export const SETTINGS_ID = "default";
-
-export async function getSettings() {
-  const existing = await prisma.userSettings.findUnique({ where: { id: SETTINGS_ID } });
+/**
+ * Settings for one account, created on first read.
+ *
+ * Every caller must pass a userId. There is deliberately no default — a missing
+ * argument is a type error rather than a silent read of somebody else's row.
+ */
+export async function getSettings(userId: string) {
+  const existing = await prisma.userSettings.findUnique({ where: { userId } });
   if (existing) return existing;
-  return prisma.userSettings.create({ data: { id: SETTINGS_ID } });
+  return prisma.userSettings.create({ data: { userId } });
 }
+
+/** Progress rows are keyed by (userId, questionId). */
+export const progressKey = (userId: string, questionId: string) => ({
+  userId_questionId: { userId, questionId },
+});

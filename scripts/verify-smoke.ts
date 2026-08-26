@@ -8,8 +8,12 @@ import { gradeSql } from "../src/lib/verify/sql";
 import { gradeNumeric } from "../src/lib/verify/numeric";
 import { completeTask, getOrCreateTodayPlan, regenerateTodayPlan, startTask } from "../src/lib/plan-service";
 import type { AnswerSpec } from "../src/data/answers";
+import { ensureTestUser } from "./test-user";
 
 (async () => {
+  const user = await ensureTestUser();
+  const uid = user.id;
+
   const counts = await prisma.question.groupBy({ by: ["verification"], _count: { verification: true } });
   console.log("Grading modes in the database:");
   for (const c of counts) console.log(`  ${c.verification.padEnd(8)} ${c._count.verification}`);
@@ -48,15 +52,15 @@ import type { AnswerSpec } from "../src/data/answers";
   await prisma.dailyPlan.deleteMany({});
   await prisma.userProgress.deleteMany({});
 
-  let plan = await regenerateTodayPlan();
+  let plan = await regenerateTodayPlan(uid);
   const task = plan.tasks[0];
-  await startTask(task.id);
+  await startTask(uid, task.id);
   // Simulate 90 seconds of work by backdating the open segment.
   await prisma.dailyTask.update({
     where: { id: task.id },
     data: { startedAt: new Date(Date.now() - 90_000) },
   });
-  await completeTask(task.id, "independent", { verified: true, submission: "SELECT 1" });
+  await completeTask(uid, task.id, "independent", { verified: true, submission: "SELECT 1" });
 
   const attempt = await prisma.attempt.findFirst({ orderBy: { createdAt: "desc" } });
   console.log(`\nVerified attempt recorded:`);
@@ -67,9 +71,9 @@ import type { AnswerSpec } from "../src/data/answers";
   }
 
   // ---- Timer survives a "reload": elapsed is reconstructed from startedAt
-  plan = (await getOrCreateTodayPlan())!;
+  plan = (await getOrCreateTodayPlan(uid))!;
   const t2 = plan.tasks.find((t) => t.status === "pending")!;
-  await startTask(t2.id);
+  await startTask(uid, t2.id);
   await prisma.dailyTask.update({
     where: { id: t2.id },
     data: { startedAt: new Date(Date.now() - 45_000) },

@@ -12,9 +12,15 @@ export type CategoryProgress = {
   attempted: number;
 };
 
-export async function categoryProgress(): Promise<CategoryProgress[]> {
+export async function categoryProgress(userId: string): Promise<CategoryProgress[]> {
   const rows = await prisma.question.findMany({
-    select: { category: true, progress: { select: { attemptCount: true, masteryScore: true, status: true } } },
+    select: {
+      category: true,
+      progress: {
+        where: { userId },
+        select: { attemptCount: true, masteryScore: true, status: true },
+      },
+    },
   });
 
   const map = new Map<string, CategoryProgress & { masterySum: number }>();
@@ -32,9 +38,9 @@ export async function categoryProgress(): Promise<CategoryProgress[]> {
       } as CategoryProgress & { masterySum: number });
 
     e.total += 1;
-    e.masterySum += r.progress?.masteryScore ?? 0;
-    if ((r.progress?.attemptCount ?? 0) > 0) e.attempted += 1;
-    const st = r.progress?.status ?? "not_started";
+    e.masterySum += r.progress[0]?.masteryScore ?? 0;
+    if ((r.progress[0]?.attemptCount ?? 0) > 0) e.attempted += 1;
+    const st = r.progress[0]?.status ?? "not_started";
     if (st === "solved" || st === "solved_quickly" || st === "solved_with_hint" || st === "mastered") {
       e.solved += 1;
     }
@@ -48,8 +54,11 @@ export async function categoryProgress(): Promise<CategoryProgress[]> {
 }
 
 /** Consecutive days, ending today or yesterday, on which at least one attempt was logged. */
-export async function currentStreak(): Promise<{ current: number; longest: number; lastActive: string | null }> {
+export async function currentStreak(
+  userId: string,
+): Promise<{ current: number; longest: number; lastActive: string | null }> {
   const attempts = await prisma.attempt.findMany({
+    where: { userId },
     select: { createdAt: true },
     orderBy: { createdAt: "desc" },
   });
@@ -97,14 +106,14 @@ export type Overview = {
   patterns: { key: string; label: string; mastery: number; coverage: number; total: number; attempted: number }[];
 };
 
-export async function overview(): Promise<Overview> {
+export async function overview(userId: string): Promise<Overview> {
   const [categories, streak, mastery, attemptAgg, attemptCount, overrunCount] = await Promise.all([
-    categoryProgress(),
-    currentStreak(),
-    loadMasteryMaps(),
-    prisma.attempt.aggregate({ _sum: { seconds: true }, _avg: { seconds: true } }),
-    prisma.attempt.count(),
-    prisma.attempt.count({ where: { overrun: true } }),
+    categoryProgress(userId),
+    currentStreak(userId),
+    loadMasteryMaps(userId),
+    prisma.attempt.aggregate({ where: { userId }, _sum: { seconds: true }, _avg: { seconds: true } }),
+    prisma.attempt.count({ where: { userId } }),
+    prisma.attempt.count({ where: { userId, overrun: true } }),
   ]);
 
   const categoryMastery: Record<string, number> = {};
@@ -152,7 +161,7 @@ export type WeeklyReview = {
 };
 
 /** Rolling 7-day review, used to seed next week's emphasis. */
-export async function weeklyReview(weeksAgo = 0): Promise<WeeklyReview> {
+export async function weeklyReview(userId: string, weeksAgo = 0): Promise<WeeklyReview> {
   const end = new Date();
   end.setHours(23, 59, 59, 999);
   end.setDate(end.getDate() - weeksAgo * 7);
@@ -161,7 +170,7 @@ export async function weeklyReview(weeksAgo = 0): Promise<WeeklyReview> {
   start.setHours(0, 0, 0, 0);
 
   const attempts = await prisma.attempt.findMany({
-    where: { createdAt: { gte: start, lte: end } },
+    where: { userId, createdAt: { gte: start, lte: end } },
     include: { question: { include: { topic: true } } },
   });
 
@@ -180,11 +189,11 @@ export async function weeklyReview(weeksAgo = 0): Promise<WeeklyReview> {
   // Weakest areas are computed over the topics actually touched this week,
   // falling back to the global weakest when the week was quiet.
   const touched = new Set(attempts.map((a) => a.question.topic.slug));
-  const all = await loadMasteryMaps();
+  const all = await loadMasteryMaps(userId);
   const pool = touched.size > 0 ? all.topics.filter((t) => touched.has(t.key)) : all.topics;
 
   const plans = await prisma.dailyPlan.findMany({
-    where: { date: { gte: dateKey(start), lte: dateKey(end) } },
+    where: { userId, date: { gte: dateKey(start), lte: dateKey(end) } },
     include: { tasks: true },
   });
 
@@ -204,13 +213,13 @@ export async function weeklyReview(weeksAgo = 0): Promise<WeeklyReview> {
 }
 
 /** Per-pattern coverage table for the DSA pattern dashboard. */
-export async function patternCoverage() {
+export async function patternCoverage(userId: string) {
   const rows = await prisma.question.findMany({
     where: { category: "DSA", pattern: { not: null } },
     select: {
       pattern: true,
       topic: { select: { slug: true, name: true } },
-      progress: { select: { masteryScore: true, attemptCount: true } },
+      progress: { where: { userId }, select: { masteryScore: true, attemptCount: true } },
     },
   });
 
@@ -218,8 +227,8 @@ export async function patternCoverage() {
     rows.map((r) => ({
       key: r.topic.slug,
       label: r.topic.name,
-      mastery: r.progress?.masteryScore ?? 0,
-      attempted: (r.progress?.attemptCount ?? 0) > 0,
+      mastery: r.progress[0]?.masteryScore ?? 0,
+      attempted: (r.progress[0]?.attemptCount ?? 0) > 0,
     })),
   );
 
@@ -227,8 +236,8 @@ export async function patternCoverage() {
     rows.map((r) => ({
       key: r.pattern!,
       label: r.pattern!,
-      mastery: r.progress?.masteryScore ?? 0,
-      attempted: (r.progress?.attemptCount ?? 0) > 0,
+      mastery: r.progress[0]?.masteryScore ?? 0,
+      attempted: (r.progress[0]?.attemptCount ?? 0) > 0,
     })),
   );
 

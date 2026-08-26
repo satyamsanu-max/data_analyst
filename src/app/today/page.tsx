@@ -4,11 +4,16 @@ import { TaskCard } from "@/components/task-card";
 import { RegenerateButton } from "@/components/regenerate-button";
 import { Meter } from "@/components/ui";
 import { getSettings } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
-  const [plan, settings] = await Promise.all([getOrCreateTodayPlan(), getSettings()]);
+  const user = await requireUser();
+  const [plan, settings] = await Promise.all([
+    getOrCreateTodayPlan(user.id),
+    getSettings(user.id),
+  ]);
   const cards = toTaskCards(plan);
   const breakdown = slotBreakdown(cards);
 

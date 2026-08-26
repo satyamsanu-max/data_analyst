@@ -10,6 +10,7 @@ import {
   getSwapOptions,
   regenerateTodayPlan,
 } from "../src/lib/plan-service";
+import { ensureTestUser } from "./test-user";
 
 function show(plan: Awaited<ReturnType<typeof getOrCreateTodayPlan>>, label: string) {
   const total = plan.tasks.reduce((s, t) => s + t.plannedMinutes, 0);
@@ -27,12 +28,15 @@ function show(plan: Awaited<ReturnType<typeof getOrCreateTodayPlan>>, label: str
 }
 
 async function main() {
+  const user = await ensureTestUser();
+  const uid = user.id;
+
   await prisma.attempt.deleteMany({});
   await prisma.dailyTask.deleteMany({});
   await prisma.dailyPlan.deleteMany({});
   await prisma.userProgress.deleteMany({});
 
-  let plan = await regenerateTodayPlan();
+  let plan = await regenerateTodayPlan(uid);
   show(plan, "Fresh plan");
 
   // --- complete the first two tasks with different outcomes.
@@ -46,18 +50,18 @@ async function main() {
 
   await setElapsed(plan.tasks[0].id, plan.tasks[0].plannedMinutes * 60 * 0.5);
   await setElapsed(plan.tasks[1].id, plan.tasks[1].plannedMinutes * 60 * 2);
-  await completeTask(plan.tasks[0].id, "independent");
-  await completeTask(plan.tasks[1].id, "unsolved");
-  const p0 = await prisma.userProgress.findUnique({ where: { questionId: plan.tasks[0].questionId } });
-  const p1 = await prisma.userProgress.findUnique({ where: { questionId: plan.tasks[1].questionId } });
+  await completeTask(uid, plan.tasks[0].id, "independent");
+  await completeTask(uid, plan.tasks[1].id, "unsolved");
+  const p0 = await prisma.userProgress.findUnique({ where: { userId_questionId: { userId: uid, questionId: plan.tasks[0].questionId } } });
+  const p1 = await prisma.userProgress.findUnique({ where: { userId_questionId: { userId: uid, questionId: plan.tasks[1].questionId } } });
   console.log("\nAfter attempts:");
   console.log(`  solved fast -> status=${p0?.status} mastery=${p0?.masteryScore} nextReview=${p0?.nextReviewDate?.toISOString().slice(0, 10)}`);
   console.log(`  failed slow -> status=${p1?.status} mastery=${p1?.masteryScore} overruns=${p1?.timesOverrun} nextReview=${p1?.nextReviewDate?.toISOString().slice(0, 10)}`);
 
   // --- swap the last pending task
-  plan = (await getOrCreateTodayPlan())!;
+  plan = (await getOrCreateTodayPlan(uid))!;
   const pending = plan.tasks.find((t) => t.status === "pending")!;
-  const opts = await getSwapOptions(plan.id, pending.id);
+  const opts = await getSwapOptions(uid, plan.id, pending.id);
   console.log(`\nSwap options for "${pending.question.title}" (headroom ${opts.headroomMinutes} min):`);
   for (const c of opts.candidates.slice(0, 5)) {
     console.log(`  ${c.question.estimatedMinutes}m  ${c.question.category.padEnd(11)} ${c.question.difficulty.padEnd(6)} prio ${c.priority} match ${c.similarity}%  ${c.question.id}`);
@@ -66,17 +70,17 @@ async function main() {
   console.log(`  candidates exceeding headroom: ${over.length} (must be 0)`);
   if (over.length) throw new Error("SWAP OFFERED AN ILLEGAL OPTION");
 
-  await applySwap(plan.id, pending.id, opts.candidates[0].question.id);
-  plan = (await getOrCreateTodayPlan())!;
+  await applySwap(uid, plan.id, pending.id, opts.candidates[0].question.id);
+  plan = (await getOrCreateTodayPlan(uid))!;
   show(plan, "After swap");
 
   // --- cross-category swap
   const target = plan.tasks.find((t) => t.status === "pending")!;
-  const cross = await getSwapOptions(plan.id, target.id, ["Guesstimate"]);
+  const cross = await getSwapOptions(uid, plan.id, target.id, ["Guesstimate"]);
   console.log(`\nCross-category swap to Guesstimate: ${cross.candidates.length} options, headroom ${cross.headroomMinutes} min`);
   if (cross.candidates.length) {
-    await applySwap(plan.id, target.id, cross.candidates[0].question.id);
-    plan = (await getOrCreateTodayPlan())!;
+    await applySwap(uid, plan.id, target.id, cross.candidates[0].question.id);
+    plan = (await getOrCreateTodayPlan(uid))!;
     show(plan, "After cross-category swap");
   }
 
@@ -90,7 +94,7 @@ async function main() {
   });
   if (tooBig) {
     try {
-      await applySwap(plan.id, anyPending.id, tooBig.id);
+      await applySwap(uid, plan.id, anyPending.id, tooBig.id);
       throw new Error("EXPECTED REJECTION BUT SWAP SUCCEEDED");
     } catch (e) {
       console.log(`\nOver-budget swap correctly rejected: ${(e as Error).message}`);

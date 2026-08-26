@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { gradeSql, ordersMatter } from "../src/lib/verify/sql";
 import { gradeNumeric, parseAnswer } from "../src/lib/verify/numeric";
 import { runUserQuery } from "../src/lib/practice-db";
-import { ANSWER_KEYS } from "../src/data/answers";
+import { resolveAnswerKeys, type AnswerSpec } from "../src/data/answers";
+import { ALL_QUESTIONS } from "../src/data";
+import { auditAnswerKeys } from "../scripts/audit-answers";
+
+const ANSWER_KEYS = resolveAnswerKeys(ALL_QUESTIONS).byId as Record<string, AnswerSpec>;
 import { SQL_QUESTIONS } from "../src/data/sql";
 
 describe("practice database", () => {
@@ -12,7 +16,7 @@ describe("practice database", () => {
       expect(res.ok, t).toBe(true);
       if (res.ok) expect(Number(res.rows[0][0]), `${t} is empty`).toBeGreaterThan(0);
     }
-  });
+  }, 60_000); // first call boots and seeds a WASM Postgres
 
   it("refuses to mutate", async () => {
     const res = await runUserQuery("DELETE FROM orders");
@@ -181,7 +185,7 @@ describe("numeric grading", () => {
   });
 
   it("has a sane answer key: every entry parses to itself", () => {
-    for (const [id, spec] of Object.entries(ANSWER_KEYS)) {
+    for (const [id, spec] of Object.entries(ANSWER_KEYS) as [string, AnswerSpec][]) {
       const g = gradeNumeric(String(spec.value), spec);
       expect(g.correct, `${id} does not accept its own value`).toBe(true);
     }
@@ -200,5 +204,32 @@ describe("guesstimate feedback quality", () => {
   it("still diagnoses percent/proportion confusion on exact questions", () => {
     const g = gradeNumeric("16.7", ANSWER_KEYS["prob-001"]);
     expect(g.feedback).toMatch(/scale/i);
+  });
+});
+
+
+describe("answer keys point at the right questions", () => {
+  const audit = auditAnswerKeys();
+
+  it("every key title resolves to exactly one question", () => {
+    expect(audit.unmatched).toEqual([]);
+  });
+
+  it("every expected value appears in that question's own solution", () => {
+    // Regression: the first version of answers.ts was keyed by question id and
+    // 39 of 70 keys landed on the wrong question, so correct answers were
+    // marked wrong and some questions became unanswerable.
+    const detail = audit.misaligned
+      .map((m) => `${m.id} "${m.title}" expects ${m.expected}`)
+      .join("; ");
+    expect(detail).toBe("");
+    expect(audit.aligned).toBe(audit.total);
+  });
+
+  it("every key states what quantity to enter", () => {
+    for (const [id, spec] of Object.entries(ANSWER_KEYS) as [string, AnswerSpec][]) {
+      expect(spec.ask, `${id} has no ask label`).toBeTruthy();
+      expect(spec.ask.trim().length, `${id} ask label is too short`).toBeGreaterThanOrEqual(5);
+    }
   });
 });

@@ -164,16 +164,16 @@ minutes are available for that slot.
 
 ## How an attempt is graded
 
-This is the part that separates the app from a checklist. **146 of the 588
+This is the part that separates the app from a checklist. **152 of the 588
 questions are graded objectively by the app** — it does not take your word for it.
 
 | Category | Questions | How it is graded |
 | --- | ---: | --- |
 | SQL | 76 | You write a query, it runs against a real Postgres instance, and the **result set** is compared against the reference. Any correct query passes, however you write it. |
 | Guesstimates | 26 | Your final estimate is checked against an order-of-magnitude band (within 3x), which is how interviewers actually grade these. |
-| Probability | 40 | Exact numeric answer, with a tolerance. |
-| Statistics / ML | 4 | Exact numeric answer, where the question has one. |
-| Everything else | 442 | Self-graded — see below. |
+| Probability | 43 | Exact numeric answer, with a tolerance. |
+| Statistics / ML | 7 | Exact numeric answer, where the question has one. |
+| Everything else | 436 | Self-graded — see below. |
 
 ### The SQL judge
 
@@ -193,6 +193,24 @@ grader compares result sets:
 Verifiability is **proved, not declared**: the seeder executes every stored SQL
 reference and marks the question `sql`-graded only if it actually runs and
 returns rows. A flag that could drift out of sync would be worse than none.
+
+### Answer keys are keyed by title, not id
+
+`src/data/answers.ts` maps question **title** to expected value. That is not
+cosmetic: the first version keyed by question id, and because ids are assigned by
+array position, hand-counting them drifted — **39 of 70 keys ended up attached to
+the wrong question**, so correct answers were marked wrong and some questions were
+unanswerable. Titles are stable and self-describing, an unknown title aborts the
+seed, and `npm test` asserts that every expected value actually appears in that
+question's own stored solution.
+
+Each key also carries an `ask` string naming the exact quantity wanted — shown
+above the input. Without it, a prompt phrased as a decision ("Should you switch?")
+gives no clue that the grader expects `2/3`. Questions with no single number, like
+"Why might this survey overstate satisfaction?", carry no key and stay self-graded.
+
+Grading records the attempt immediately. The verdict is objective and a single
+"I looked at a hint" checkbox covers the rest, so there is no second prompt.
 
 ### What cannot be graded, and why
 
@@ -343,7 +361,7 @@ Next.js/PostCSS advisories — is resolved on the current versions.
 ## Verification
 
 ```bash
-npm test              # 81 tests: scheduler, bank integrity, grading, credentials
+npm test              # 84 tests: scheduler, bank integrity, grading, credentials, answer keys
 npm run smoke         # regenerate -> attempt -> swap -> over-budget rejection
 npm run smoke:verify  # SQL judge, numeric grading, verified attempts, timer persistence
 ```

@@ -95,6 +95,21 @@ export async function gradeNumericAction(
   };
 }
 
+/** What quantity a numeric question wants, shown above the input. */
+export async function answerAskAction(questionId: string): Promise<string | null> {
+  await requireUser();
+  const q = await prisma.question.findUnique({
+    where: { id: questionId },
+    select: { answerSpec: true },
+  });
+  if (!q?.answerSpec) return null;
+  try {
+    return (JSON.parse(q.answerSpec) as AnswerSpec).ask ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** The practice schema, for the reference panel next to the editor. */
 export async function practiceSchemaAction() {
   const { PRACTICE_DDL } = await import("@/lib/practice-db");

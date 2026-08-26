@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { ALL_QUESTIONS, COMPANIES, SOURCES, TOPICS, validateBank, CATEGORY_CAPS } from "../src/data";
-import { ANSWER_KEYS } from "../src/data/answers";
+import { resolveAnswerKeys } from "../src/data/answers";
 import { runUserQuery } from "../src/lib/practice-db";
 
 const prisma = new PrismaClient();
@@ -51,10 +51,19 @@ async function main() {
   // executing the stored reference against the practice database — a flag that
   // could drift out of sync would be worse than no flag at all.
   console.log("\nDetermining grading mode per question...");
+  // Answer keys are stored by TITLE and resolved to ids here. An unknown title
+  // aborts the seed rather than silently dropping (or mis-attaching) a key.
+  const { byId: answerKeys, unmatched } = resolveAnswerKeys(ALL_QUESTIONS);
+  if (unmatched.length) {
+    console.error("Answer keys whose title matches no question:");
+    for (const t of unmatched) console.error("  - " + t);
+    process.exit(1);
+  }
+
   const verification = new Map<string, string>();
   let sqlVerifiable = 0;
   for (const q of ALL_QUESTIONS) {
-    if (ANSWER_KEYS[q.id]) {
+    if (answerKeys[q.id]) {
       verification.set(q.id, "numeric");
       continue;
     }
@@ -76,7 +85,7 @@ async function main() {
   console.log(`\nSeeding ${ALL_QUESTIONS.length} questions...`);
   let n = 0;
   for (const q of ALL_QUESTIONS) {
-    const spec = ANSWER_KEYS[q.id];
+    const spec = answerKeys[q.id];
     const data = {
       verification: verification.get(q.id) ?? "self",
       answerSpec: spec ? JSON.stringify(spec) : null,

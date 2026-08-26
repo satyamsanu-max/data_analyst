@@ -11,8 +11,14 @@ export type AnswerPanelProps = {
   questionId: string;
   verification: string; // "sql" | "numeric" | "self"
   /** Called when the app grades the attempt objectively. */
-  onGraded?: (correct: boolean, submission: string) => void;
+  onGraded?: (correct: boolean, submission: string, hintUsed: boolean) => void;
   schema?: string;
+  /**
+   * The exact quantity wanted, e.g. "Probability of winning if you switch".
+   * Without this a question like "Should you switch?" gives no clue that the
+   * grader is expecting 2/3.
+   */
+  ask?: string;
 };
 
 function ResultGrid({ grid, label }: { grid: Grid; label: string }) {
@@ -95,7 +101,7 @@ function SqlWorkspace({ questionId, onGraded, schema }: AnswerPanelProps) {
       setRun(null);
       const g = await gradeSqlAction(questionId, sql);
       setGrade(g);
-      if (g.graded) onGraded?.(g.correct, sql);
+      if (g.graded) onGraded?.(g.correct, sql, false);
     });
 
   return (
@@ -169,8 +175,9 @@ function SqlWorkspace({ questionId, onGraded, schema }: AnswerPanelProps) {
 }
 
 // -------------------------------------------------------------- Numeric
-function NumericWorkspace({ questionId, onGraded }: AnswerPanelProps) {
+function NumericWorkspace({ questionId, onGraded, ask }: AnswerPanelProps) {
   const [value, setValue] = useState("");
+  const [hintUsed, setHintUsed] = useState(false);
   const [grade, setGrade] = useState<Awaited<ReturnType<typeof gradeNumericAction>> | null>(null);
   const [pending, start] = useTransition();
 
@@ -178,12 +185,15 @@ function NumericWorkspace({ questionId, onGraded }: AnswerPanelProps) {
     start(async () => {
       const g = await gradeNumericAction(questionId, value);
       setGrade(g);
-      if (g.graded) onGraded?.(g.correct, value);
+      if (g.graded) onGraded?.(g.correct, value, hintUsed);
     });
 
   return (
     <div className="space-y-3">
-      <span className="stat-label">Your answer</span>
+      <div>
+        <span className="stat-label">Your answer</span>
+        {ask && <p className="mt-0.5 text-sm font-medium text-foreground">{ask}</p>}
+      </div>
       <div className="flex flex-wrap gap-2">
         <input
           value={value}
@@ -196,9 +206,20 @@ function NumericWorkspace({ questionId, onGraded }: AnswerPanelProps) {
           {pending ? "Checking…" : "Check answer"}
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Fractions, decimals, percentages and shorthand like &ldquo;2.5m&rdquo; or &ldquo;80 crore&rdquo; are all accepted.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          Fractions, decimals, percentages and shorthand like &ldquo;2.5m&rdquo; or &ldquo;80 crore&rdquo; are accepted.
+        </p>
+        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={hintUsed}
+            onChange={(e) => setHintUsed(e.target.checked)}
+            className="h-3.5 w-3.5 accent-current"
+          />
+          I looked at a hint or the solution
+        </label>
+      </div>
 
       {grade && !grade.graded && <p className="text-sm text-muted-foreground">{grade.error}</p>}
       {grade && grade.graded && (

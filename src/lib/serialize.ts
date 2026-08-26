@@ -2,6 +2,16 @@ import type { FullPlan } from "./plan-service";
 import type { TaskCardData } from "@/components/task-card";
 import { SQL_PRACTICE_SCHEMA } from "@/data";
 
+/** The quantity a numeric question wants, pulled out of its stored answer spec. */
+function parseAsk(answerSpec: string | null): string | undefined {
+  if (!answerSpec) return undefined;
+  try {
+    return (JSON.parse(answerSpec) as { ask?: string }).ask;
+  } catch {
+    return undefined;
+  }
+}
+
 export function slotLabelFor(category: string): string {
   if (category === "Probability" || category === "Statistics") return "Probability/Statistics";
   if (category === "ML" || category === "Python") return "ML/Python";
@@ -41,6 +51,7 @@ export function toTaskCards(plan: FullPlan): TaskCardData[] {
       attemptCount: t.question.progress[0]?.attemptCount ?? 0,
       verification: t.question.verification,
       practiceSchema: t.question.category === "SQL" ? SQL_PRACTICE_SCHEMA : undefined,
+      ask: parseAsk(t.question.answerSpec),
     },
   }));
 }

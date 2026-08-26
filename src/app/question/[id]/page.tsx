@@ -45,6 +45,18 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
   const skills = parseArr(q.skillsTested);
   const progress = q.progress[0] ?? null;
 
+  // What quantity a numeric question wants, e.g. "Probability of winning if you
+  // switch". Without it, a prompt phrased as a decision gives no clue that the
+  // grader expects a number.
+  let ask: string | undefined;
+  if (q.answerSpec) {
+    try {
+      ask = (JSON.parse(q.answerSpec) as { ask?: string }).ask;
+    } catch {
+      ask = undefined;
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -126,6 +138,7 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
                   questionId={q.id}
                   verification={q.verification}
                   schema={q.category === "SQL" ? PRACTICE_DDL.trim() : undefined}
+                  ask={ask}
                 />
               </CardContent>
             </Card>

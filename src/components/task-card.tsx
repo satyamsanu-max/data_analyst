@@ -54,6 +54,7 @@ export type TaskCardData = {
     attemptCount: number;
     verification: string;
     practiceSchema?: string;
+    ask?: string;
   };
 };
 
@@ -101,7 +102,7 @@ export function TaskCard({ task }: { task: TaskCardData }) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [graded, setGraded] = useState<{ correct: boolean; submission: string } | null>(null);
+  const [graded, setGraded] = useState<{ correct: boolean; submission: string; hintUsed: boolean } | null>(null);
   const [workOpen, setWorkOpen] = useState(false);
   const [, startTransition] = useTransition();
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -146,14 +147,17 @@ export function TaskCard({ task }: { task: TaskCardData }) {
     });
   }
 
-  function handleComplete(outcome: Outcome) {
+  // `gradedNow` is passed explicitly when completing straight after grading:
+  // reading it from state would race the setGraded that has not flushed yet.
+  function handleComplete(outcome: Outcome, gradedNow?: { submission: string }) {
     setRunning(false);
+    const evidence = gradedNow ?? graded;
     startTransition(async () => {
       await pauseTaskAction(task.id); // close the open segment before reading the clock
       const r = await completeTaskAction(
         task.id,
         outcome,
-        graded ? { verified: true, submission: graded.submission } : undefined,
+        evidence ? { verified: true, submission: evidence.submission } : undefined,
       );
       if (!r.ok) setError(r.error);
       else setReviewOpen(false);
@@ -259,9 +263,15 @@ export function TaskCard({ task }: { task: TaskCardData }) {
               questionId={q.id}
               verification={q.verification}
               schema={q.practiceSchema}
-              onGraded={(correct, submission) => {
-                setGraded({ correct, submission });
-                if (correct) setReviewOpen(true);
+              ask={q.ask}
+              onGraded={(correct, submission, hintUsed) => {
+                setGraded({ correct, submission, hintUsed });
+                // The grade is objective and the hint checkbox covers the rest,
+                // so complete the task straight away rather than re-asking.
+                handleComplete(
+                  correct ? (hintUsed ? "minor_hint" : "independent") : "unsolved",
+                  { submission },
+                );
               }}
             />
             {graded && (

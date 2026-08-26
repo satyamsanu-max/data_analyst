@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
 import { SolutionReveal } from "@/components/solution-reveal";
+import { AnswerPanel, VerificationBadge } from "@/components/answer-panel";
+import { PRACTICE_DDL } from "@/lib/practice-db";
 import {
   CATEGORY_CLASS,
   DIFFICULTY_CLASS,
@@ -10,7 +12,6 @@ import {
   categorySlug,
   formatSeconds,
 } from "@/lib/utils";
-import { SQL_PRACTICE_SCHEMA } from "@/data";
 
 export const dynamic = "force-dynamic";
 
@@ -98,19 +99,6 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
             </Card>
           )}
 
-          {q.category === "SQL" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Practice schema</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <pre className="rounded-md border border-border bg-secondary/40 p-3 text-xs leading-relaxed">
-                  {SQL_PRACTICE_SCHEMA}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
-
           {q.assumptions && (
             <Card>
               <CardHeader>
@@ -118,6 +106,31 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-relaxed text-muted-foreground">{q.assumptions}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {q.verification !== "self" && (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle>
+                  {q.verification === "sql" ? "Write your query" : "Your answer"}
+                </CardTitle>
+                <VerificationBadge verification={q.verification} />
+              </CardHeader>
+              <CardContent>
+                <AnswerPanel
+                  questionId={q.id}
+                  verification={q.verification}
+                  schema={q.category === "SQL" ? PRACTICE_DDL.trim() : undefined}
+                />
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Practising here does not log an attempt. Start this question from{" "}
+                  <Link href="/today" className="text-primary hover:underline">
+                    today&rsquo;s plan
+                  </Link>{" "}
+                  to have the result count toward mastery.
+                </p>
               </CardContent>
             </Card>
           )}

@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
 import { CATEGORY_CLASS, CATEGORY_FROM_SLUG, DIFFICULTY_CLASS, STATUS_LABEL, cn } from "@/lib/utils";
-import { CATEGORY_CAPS, type Category } from "@/data/types";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +58,7 @@ export default async function BankPage({ params, searchParams }: Props) {
         <div className="stat-label">Question bank</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">{category}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {total} curated questions · bank cap {CATEGORY_CAPS[category as Category]} · {solved} solved
+          {total} curated questions · {solved} solved
         </p>
         <Meter value={(solved / Math.max(1, total)) * 100} className="mt-3 max-w-md" />
       </div>

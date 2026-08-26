@@ -6,6 +6,7 @@ import {
   applySwap,
   completeTask,
   getSwapOptions,
+  pauseTask,
   regenerateTodayPlan,
   skipTask,
   startTask,
@@ -102,17 +103,30 @@ export async function startTaskAction(taskId: string): Promise<ActionResult> {
   }
 }
 
+/**
+ * Solve time is read from the server-side clock inside completeTask, not passed
+ * in from the browser — so a reload cannot lose it and a client cannot fake it.
+ */
 export async function completeTaskAction(
   taskId: string,
   outcome: Outcome,
-  seconds: number,
+  graded?: { verified: boolean; submission?: string },
 ): Promise<ActionResult<{ mastery: number; overran: boolean }>> {
   try {
-    const { progress, overran } = await completeTask(taskId, outcome, Math.max(0, Math.round(seconds)));
+    const { progress, overran } = await completeTask(taskId, outcome, graded);
     refresh();
     return { ok: true, data: { mastery: progress.masteryScore, overran } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not record the attempt" };
+  }
+}
+
+export async function pauseTaskAction(taskId: string): Promise<ActionResult> {
+  try {
+    await pauseTask(taskId);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not pause the timer" };
   }
 }
 

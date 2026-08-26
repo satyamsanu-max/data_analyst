@@ -51,7 +51,6 @@ export default async function ProgressPage() {
                 </Link>
                 <span className="tabular-nums text-muted-foreground">
                   {c.solved} / {c.total}
-                  <span className="ml-2 text-xs">(cap {c.cap})</span>
                 </span>
               </div>
               <div className="relative mt-1.5 h-2 w-full overflow-hidden rounded-full bg-secondary">

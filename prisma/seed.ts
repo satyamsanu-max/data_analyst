@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { ALL_QUESTIONS, COMPANIES, SOURCES, TOPICS, validateBank, CATEGORY_CAPS } from "../src/data";
+import { ANSWER_KEYS } from "../src/data/answers";
+import { runUserQuery } from "../src/lib/practice-db";
 
 const prisma = new PrismaClient();
 
@@ -45,10 +47,39 @@ async function main() {
   const companyIds = new Map((await prisma.company.findMany()).map((c) => [c.slug, c.id]));
   const sourceIds = new Map((await prisma.source.findMany()).map((s) => [s.name, s.id]));
 
-  console.log(`Seeding ${ALL_QUESTIONS.length} questions...`);
+  // Decide how each question is graded. For SQL we PROVE verifiability by
+  // executing the stored reference against the practice database — a flag that
+  // could drift out of sync would be worse than no flag at all.
+  console.log("\nDetermining grading mode per question...");
+  const verification = new Map<string, string>();
+  let sqlVerifiable = 0;
+  for (const q of ALL_QUESTIONS) {
+    if (ANSWER_KEYS[q.id]) {
+      verification.set(q.id, "numeric");
+      continue;
+    }
+    if (q.category === "SQL" && q.solution) {
+      const res = await runUserQuery(q.solution);
+      if (res.ok && res.rowCount > 0) {
+        verification.set(q.id, "sql");
+        sqlVerifiable++;
+        continue;
+      }
+    }
+    verification.set(q.id, "self");
+  }
+  const numericCount = [...verification.values()].filter((v) => v === "numeric").length;
+  console.log(`  sql-graded:     ${sqlVerifiable}`);
+  console.log(`  numeric-graded: ${numericCount}`);
+  console.log(`  self-graded:    ${ALL_QUESTIONS.length - sqlVerifiable - numericCount}`);
+
+  console.log(`\nSeeding ${ALL_QUESTIONS.length} questions...`);
   let n = 0;
   for (const q of ALL_QUESTIONS) {
+    const spec = ANSWER_KEYS[q.id];
     const data = {
+      verification: verification.get(q.id) ?? "self",
+      answerSpec: spec ? JSON.stringify(spec) : null,
       category: q.category,
       title: q.title,
       topicId: topicIds.get(q.topic)!,

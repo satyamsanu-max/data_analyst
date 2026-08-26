@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import {
   applySwapAction,
   completeTaskAction,
+  pauseTaskAction,
   skipTaskAction,
   startTaskAction,
   swapOptionsDetailedAction,
@@ -17,6 +18,7 @@ import {
   formatSeconds,
 } from "@/lib/utils";
 import { OUTCOME_LABELS, type Outcome } from "@/lib/mastery";
+import { AnswerPanel, VerificationBadge } from "./answer-panel";
 
 export type TaskCardData = {
   id: string;
@@ -25,7 +27,10 @@ export type TaskCardData = {
   plannedMinutes: number;
   status: string;
   outcome: string | null;
+  /** Accumulated time from finished run segments. */
   elapsedSeconds: number;
+  /** ISO timestamp of the current running segment, or null while paused. */
+  startedAt: string | null;
   swapped: boolean;
   slotLabel: string;
   question: {
@@ -47,6 +52,8 @@ export type TaskCardData = {
     masteryScore: number;
     status: string;
     attemptCount: number;
+    verification: string;
+    practiceSchema?: string;
   };
 };
 
@@ -80,12 +87,19 @@ export function TaskCard({ task }: { task: TaskCardData }) {
   const done = task.status === "done";
   const skipped = task.status === "skipped";
 
-  const [running, setRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(task.elapsedSeconds);
+  // The clock lives on the server: accumulated seconds plus the open segment.
+  // Reloading the page or closing the tab therefore cannot lose the time.
+  const liveElapsed = (base: number, startedAt: string | null) =>
+    base + (startedAt ? Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)) : 0);
+
+  const [running, setRunning] = useState(task.startedAt !== null && task.status !== "done");
+  const [elapsed, setElapsed] = useState(() => liveElapsed(task.elapsedSeconds, task.startedAt));
   const [showHint, setShowHint] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [graded, setGraded] = useState<{ correct: boolean; submission: string } | null>(null);
+  const [workOpen, setWorkOpen] = useState(false);
   const [, startTransition] = useTransition();
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -107,8 +121,17 @@ export function TaskCard({ task }: { task: TaskCardData }) {
 
   function handleStart() {
     setRunning(true);
+    setWorkOpen(q.verification !== "self");
     startTransition(async () => {
       const r = await startTaskAction(task.id);
+      if (!r.ok) setError(r.error);
+    });
+  }
+
+  function handlePause() {
+    setRunning(false);
+    startTransition(async () => {
+      const r = await pauseTaskAction(task.id);
       if (!r.ok) setError(r.error);
     });
   }
@@ -116,7 +139,12 @@ export function TaskCard({ task }: { task: TaskCardData }) {
   function handleComplete(outcome: Outcome) {
     setRunning(false);
     startTransition(async () => {
-      const r = await completeTaskAction(task.id, outcome, elapsed);
+      await pauseTaskAction(task.id); // close the open segment before reading the clock
+      const r = await completeTaskAction(
+        task.id,
+        outcome,
+        graded ? { verified: true, submission: graded.submission } : undefined,
+      );
       if (!r.ok) setError(r.error);
       else setReviewOpen(false);
     });
@@ -143,6 +171,7 @@ export function TaskCard({ task }: { task: TaskCardData }) {
         <Badge className={DIFFICULTY_CLASS[q.difficulty]}>{q.difficulty}</Badge>
         <Badge>{q.estimatedMinutes} min</Badge>
         {task.swapped && <Badge className="border-primary/30 bg-primary/10 text-primary">swapped</Badge>}
+        <VerificationBadge verification={q.verification} />
         {done && (
           <Badge className="border-easy/30 bg-easy/10 text-easy">
             done · {task.outcome ? OUTCOME_LABELS[task.outcome as Outcome] : ""}
@@ -214,6 +243,27 @@ export function TaskCard({ task }: { task: TaskCardData }) {
           </div>
         )}
 
+        {workOpen && !done && q.verification !== "self" && (
+          <div className="mt-4 rounded-md border border-border p-3">
+            <AnswerPanel
+              questionId={q.id}
+              verification={q.verification}
+              schema={q.practiceSchema}
+              onGraded={(correct, submission) => {
+                setGraded({ correct, submission });
+                if (correct) setReviewOpen(true);
+              }}
+            />
+            {graded && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                {graded.correct
+                  ? "Graded correct — this will be recorded as a verified solve."
+                  : "Graded incorrect so far. Keep going, or mark how it went."}
+              </p>
+            )}
+          </div>
+        )}
+
         {showHint && q.hint && (
           <p className="mt-3 rounded-md border border-border bg-secondary/40 p-3 text-sm">{q.hint}</p>
         )}
@@ -228,18 +278,23 @@ export function TaskCard({ task }: { task: TaskCardData }) {
               </Button>
             )}
             {running && (
-              <Button size="sm" variant="secondary" onClick={() => setRunning(false)}>
+              <Button size="sm" variant="secondary" onClick={handlePause}>
                 Pause
               </Button>
             )}
             {!running && elapsed > 0 && (
-              <Button size="sm" onClick={() => setRunning(true)}>
+              <Button size="sm" onClick={handleStart}>
                 Resume
               </Button>
             )}
             {elapsed > 0 && (
               <Button size="sm" variant="outline" onClick={() => setReviewOpen(true)}>
                 Complete
+              </Button>
+            )}
+            {q.verification !== "self" && (
+              <Button size="sm" variant="outline" onClick={() => setWorkOpen((w) => !w)}>
+                {workOpen ? "Hide workspace" : "Solve here"}
               </Button>
             )}
             {q.hint && (

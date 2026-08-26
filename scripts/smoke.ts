@@ -35,9 +35,19 @@ async function main() {
   let plan = await regenerateTodayPlan();
   show(plan, "Fresh plan");
 
-  // --- complete the first two tasks with different outcomes
-  await completeTask(plan.tasks[0].id, "independent", plan.tasks[0].plannedMinutes * 60 * 0.5);
-  await completeTask(plan.tasks[1].id, "unsolved", plan.tasks[1].plannedMinutes * 60 * 2);
+  // --- complete the first two tasks with different outcomes.
+  // Solve time now comes from the task's own clock, so seed it the way the timer
+  // would have: one solved in half the estimate, one dragging on to double it.
+  const setElapsed = (id: string, seconds: number) =>
+    prisma.dailyTask.update({
+      where: { id },
+      data: { elapsedSeconds: Math.round(seconds), startedAt: null },
+    });
+
+  await setElapsed(plan.tasks[0].id, plan.tasks[0].plannedMinutes * 60 * 0.5);
+  await setElapsed(plan.tasks[1].id, plan.tasks[1].plannedMinutes * 60 * 2);
+  await completeTask(plan.tasks[0].id, "independent");
+  await completeTask(plan.tasks[1].id, "unsolved");
   const p0 = await prisma.userProgress.findUnique({ where: { questionId: plan.tasks[0].questionId } });
   const p1 = await prisma.userProgress.findUnique({ where: { questionId: plan.tasks[1].questionId } });
   console.log("\nAfter attempts:");

@@ -86,6 +86,17 @@ model Question {
   hint        String?
   solution    String?
   explanation String?
+
+  /// How an answer is graded:
+  ///   "sql"     - run the query against the practice DB and compare result sets
+  ///   "numeric" - compare a typed number against answerSpec within a tolerance
+  ///   "self"    - conceptual; the user grades themselves
+  /// Set by the seeder, which proves SQL verifiability by actually running each
+  /// reference solution rather than trusting a hand-maintained flag.
+  verification String  @default("self")
+  /// JSON: { value, tolerance, unit, alternates } for numeric grading.
+  answerSpec   String?
+
   /// Guesstimate-specific
   framework   String?
   assumptions String?
@@ -174,6 +185,11 @@ model Attempt {
   outcome    String // independent | minor_hint | major_hint | unsolved
   hintUsed   Boolean  @default(false)
   overrun    Boolean  @default(false)
+  /// True when the app graded this objectively (SQL result set or numeric answer)
+  /// rather than taking the user's word for it.
+  verified   Boolean  @default(false)
+  /// The submission itself, kept so the attempt history is reviewable.
+  submission String?
 
   @@index([questionId])
   @@index([createdAt])

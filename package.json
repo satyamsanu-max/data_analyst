@@ -17,9 +17,12 @@
     "smoke": "tsx scripts/smoke.ts",
     "predev": "node scripts/ensure-setup.mjs",
     "prebuild": "node scripts/ensure-setup.mjs",
-    "presmoke": "node scripts/ensure-setup.mjs"
+    "presmoke": "node scripts/ensure-setup.mjs",
+    "smoke:verify": "tsx scripts/verify-smoke.ts",
+    "presmoke:verify": "node scripts/ensure-setup.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.7",
     "@prisma/client": "^6.19.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

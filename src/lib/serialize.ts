@@ -1,5 +1,6 @@
 import type { FullPlan } from "./plan-service";
 import type { TaskCardData } from "@/components/task-card";
+import { SQL_PRACTICE_SCHEMA } from "@/data";
 
 export function slotLabelFor(category: string): string {
   if (category === "Probability" || category === "Statistics") return "Probability/Statistics";
@@ -16,6 +17,7 @@ export function toTaskCards(plan: FullPlan): TaskCardData[] {
     status: t.status,
     outcome: t.outcome,
     elapsedSeconds: t.elapsedSeconds,
+    startedAt: t.startedAt ? t.startedAt.toISOString() : null,
     swapped: t.swapped,
     slotLabel: slotLabelFor(t.question.category),
     question: {
@@ -37,6 +39,8 @@ export function toTaskCards(plan: FullPlan): TaskCardData[] {
       masteryScore: t.question.progress?.masteryScore ?? 0,
       status: t.question.progress?.status ?? "not_started",
       attemptCount: t.question.progress?.attemptCount ?? 0,
+      verification: t.question.verification,
+      practiceSchema: t.question.category === "SQL" ? SQL_PRACTICE_SCHEMA : undefined,
     },
   }));
 }

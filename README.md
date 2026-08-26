@@ -35,8 +35,9 @@ with `Environment variable not found: DATABASE_URL`.
 | `npm run db:seed` | Re-seed questions (idempotent upsert) |
 | `npm run db:setup` | Force a full generate + push + seed |
 | `npm run db:reset` | **Destructive** — drop the DB and re-seed from scratch |
-| `npm test` | Scheduler + question-bank test suites |
-| `npm run smoke` | End-to-end check against the real DB |
+| `npm test` | Scheduler, question-bank and grading test suites |
+| `npm run smoke` | End-to-end plan/swap check against the real DB |
+| `npm run smoke:verify` | End-to-end grading check (SQL judge, numeric, timer) |
 | `npm run build` | Production build |
 
 ---
@@ -157,26 +158,78 @@ minutes are available for that slot.
 
 ---
 
+## How an attempt is graded
+
+This is the part that separates the app from a checklist. **146 of the 588
+questions are graded objectively by the app** — it does not take your word for it.
+
+| Category | Questions | How it is graded |
+| --- | ---: | --- |
+| SQL | 76 | You write a query, it runs against a real Postgres instance, and the **result set** is compared against the reference. Any correct query passes, however you write it. |
+| Guesstimates | 26 | Your final estimate is checked against an order-of-magnitude band (within 3x), which is how interviewers actually grade these. |
+| Probability | 40 | Exact numeric answer, with a tolerance. |
+| Statistics / ML | 4 | Exact numeric answer, where the question has one. |
+| Everything else | 442 | Self-graded — see below. |
+
+### The SQL judge
+
+`src/lib/practice-db.ts` boots a real Postgres (PGlite compiled to WASM) and
+seeds it from a fixed PRNG, so results are deterministic. Your query and the
+reference solution run against the **same instance in the same request**, and the
+grader compares result sets:
+
+- Row order is only enforced when the reference itself has a top-level `ORDER BY`.
+- `NUMERIC` values are compared numerically, so float noise between equivalent
+  formulations does not cause spurious failures.
+- Near-misses are named specifically: wrong column count, right rows in the wrong
+  order, right values with reordered columns.
+- Queries run in a `READ ONLY` transaction with a 5-second statement timeout, so
+  a submission can neither mutate the data nor wedge the shared instance.
+
+Verifiability is **proved, not declared**: the seeder executes every stored SQL
+reference and marks the question `sql`-graded only if it actually runs and
+returns rows. A flag that could drift out of sync would be worse than none.
+
+### What cannot be graded, and why
+
+ML questions ("explain the bias-variance tradeoff") and conceptual statistics
+questions ("define a p-value") are *spoken-answer* interview questions. There is
+no answer key that a machine can check, so they stay self-graded. That is a
+property of the material, not a gap in the build — and it is why the review step
+still exists for every question.
+
+DSA links out to LeetCode, which hosts the statement, constraints and test cases.
+The app records your time and your self-assessment; it does not run your code.
+
 ## Mastery and spaced repetition
 
-Completing a question asks one question: *how did this go?* — solved independently,
-minor hint, major hint, or could not solve. From that plus the recorded time,
+Completing a question asks one question: *how did this go?* — solved
+independently, minor hint, major hint, or could not solve. From that, the
+recorded time, and whether the app graded the attempt objectively,
 `src/lib/mastery.ts` updates:
 
 - **mastery score** (0–100), with a bonus for solving well inside the estimate, a
-  penalty for overrunning, and diminishing returns on repeat solves;
+  penalty for overrunning, diminishing returns on repeat solves, and extra weight
+  when the result was machine-verified rather than self-reported;
 - **status** — `not_started`, `attempted`, `solved`, `solved_quickly`,
   `solved_with_hint`, `failed`, `needs_review`, `mastered`;
 - **next review date** — 1 day at low mastery out to 90 days at mastered, pulled
   back in proportion to how many times you have failed the question;
-- **time overrun** flag when you take more than 1.5× the estimate, which feeds back
-  into future scheduling.
+- **time overrun** flag when you take more than 1.5x the estimate, which feeds
+  back into future scheduling.
 
 Topic and pattern mastery roll up from question mastery, counting unattempted
-questions as zero — so a single number captures both *coverage* and *depth*, which
-is exactly what the scheduler should react to.
+questions as zero — so a single number captures both *coverage* and *depth*.
 
----
+### The session timer
+
+The clock is **server-side truth**, not browser state. `DailyTask.elapsedSeconds`
+holds accumulated time from finished segments and `startedAt` marks the open one,
+so the live value is `elapsedSeconds + (now - startedAt)`. Reloading the page,
+closing the tab, or navigating away mid-question no longer loses your time —
+which matters, because the intended workflow for DSA is "leave this page and go
+solve on LeetCode". Solve time is read from that clock when you complete a task,
+so the browser cannot lose it or fake it.
 
 ## Pages
 
@@ -247,12 +300,21 @@ Next.js/PostCSS advisories — is resolved on the current versions.
 ## Verification
 
 ```bash
-npm test        # 36 tests: scheduler constraints + bank integrity
-npm run smoke   # regenerate → attempt → swap → over-budget rejection, against the real DB
+npm test              # 73 tests: scheduler constraints, bank integrity, grading
+npm run smoke         # regenerate -> attempt -> swap -> over-budget rejection
+npm run smoke:verify  # SQL judge, numeric grading, verified attempts, timer persistence
 ```
 
-The smoke script prints the generated plan, exercises a completion, a same-category
-swap, a cross-category swap, and confirms that an over-budget swap is refused.
+`smoke` prints the generated plan, exercises a completion, a same-category swap, a
+cross-category swap, and confirms an over-budget swap is refused.
+
+`smoke:verify` submits a correct query, a wrong query and a `DELETE` to the SQL
+judge, checks numeric grading both ways, and proves the timer survives a reload
+by reconstructing elapsed time from the server clock.
+
+Notably, one test grades **every** SQL-verified question against its own stored
+reference, so a broken reference solution fails CI rather than silently marking
+your correct answer wrong.
 
 ---
 

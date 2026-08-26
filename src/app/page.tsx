@@ -176,7 +176,7 @@ export default async function DashboardPage() {
                 </div>
                 <Meter value={(c.solved / Math.max(1, c.total)) * 100} className="mt-1.5 h-1.5" />
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  bank cap {c.cap} · mastery {c.mastery}%
+                  mastery {c.mastery}%
                 </div>
               </div>
             ))}

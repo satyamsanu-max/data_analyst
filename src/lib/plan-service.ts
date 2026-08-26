@@ -266,13 +266,17 @@ export async function applySwap(planId: string, taskId: string, newQuestionId: s
 export async function completeTask(
   taskId: string,
   outcome: Outcome,
-  seconds: number,
+  graded?: { verified: boolean; submission?: string },
 ) {
   const task = await prisma.dailyTask.findUnique({
     where: { id: taskId },
     include: { question: true, plan: true },
   });
   if (!task) throw new Error("Task not found");
+
+  // Solve time comes from the server-side clock, not from whatever the browser
+  // reports, so a reload or a closed tab cannot lose or fabricate it.
+  const seconds = liveElapsedSeconds(task);
 
   const prior = (await prisma.userProgress.findUnique({ where: { questionId: task.questionId } })) ?? {
     ...EMPTY_PROGRESS,
@@ -289,7 +293,12 @@ export async function completeTask(
       totalSeconds: prior.totalSeconds,
       timesOverrun: prior.timesOverrun,
     },
-    { outcome, seconds, estimatedMinutes: task.question.estimatedMinutes },
+    {
+      outcome,
+      seconds,
+      estimatedMinutes: task.question.estimatedMinutes,
+      verified: graded?.verified ?? false,
+    },
   );
 
   const overran = seconds > task.question.estimatedMinutes * 60 * 1.5;
@@ -308,6 +317,8 @@ export async function completeTask(
         outcome,
         hintUsed: outcome === "minor_hint" || outcome === "major_hint",
         overrun: overran,
+        verified: graded?.verified ?? false,
+        submission: graded?.submission ?? null,
       },
     }),
     prisma.dailyTask.update({
@@ -316,6 +327,7 @@ export async function completeTask(
         status: "done",
         outcome,
         elapsedSeconds: seconds,
+        startedAt: null,
         completedAt: new Date(),
       },
     }),
@@ -332,13 +344,48 @@ export async function completeTask(
   return { progress: next, overran };
 }
 
+/**
+ * Timer model.
+ *
+ * `elapsedSeconds` holds accumulated time from finished run segments.
+ * `startedAt` is when the CURRENT segment began, or null while paused.
+ * So the live value is always:  elapsedSeconds + (startedAt ? now - startedAt : 0)
+ *
+ * Keeping the clock in the database rather than in React state means a reload,
+ * a tab close, or navigating away mid-question no longer loses the time — which
+ * matters, because the whole workflow is "leave this page and go solve".
+ */
+export function liveElapsedSeconds(task: { elapsedSeconds: number; startedAt: Date | null }): number {
+  const running = task.startedAt ? Math.floor((Date.now() - task.startedAt.getTime()) / 1000) : 0;
+  return task.elapsedSeconds + Math.max(0, running);
+}
+
 export async function startTask(taskId: string) {
+  const task = await prisma.dailyTask.findUnique({ where: { id: taskId } });
+  if (!task) throw new Error("Task not found");
+  if (task.startedAt) return task; // already running; do not restart the segment
+
   return prisma.dailyTask.update({
     where: { id: taskId },
     data: { status: "in_progress", startedAt: new Date() },
   });
 }
 
+/** Close the current run segment, folding its time into the accumulated total. */
+export async function pauseTask(taskId: string) {
+  const task = await prisma.dailyTask.findUnique({ where: { id: taskId } });
+  if (!task) throw new Error("Task not found");
+  if (!task.startedAt) return task; // already paused
+
+  return prisma.dailyTask.update({
+    where: { id: taskId },
+    data: { elapsedSeconds: liveElapsedSeconds(task), startedAt: null },
+  });
+}
+
 export async function skipTask(taskId: string) {
-  return prisma.dailyTask.update({ where: { id: taskId }, data: { status: "skipped" } });
+  return prisma.dailyTask.update({
+    where: { id: taskId },
+    data: { status: "skipped", startedAt: null },
+  });
 }

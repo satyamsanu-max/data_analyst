@@ -59,6 +59,11 @@ export type AttemptInput = {
   outcome: Outcome;
   seconds: number;
   estimatedMinutes: number;
+  /**
+   * True when the app graded the attempt objectively (SQL result set matched, or
+   * the numeric answer was right) rather than taking the user's word for it.
+   */
+  verified?: boolean;
   now?: Date;
 };
 
@@ -96,6 +101,13 @@ export function applyAttempt(prior: PriorProgress, input: AttemptInput): Progres
     else if (overran) delta -= 8;
   } else if (input.outcome !== "unsolved" && overran) {
     delta -= 4;
+  }
+
+  // Objective evidence counts for more than self-assessment. A machine-checked
+  // solve earns a little extra; a machine-checked failure costs a little extra,
+  // because neither reading depends on the user judging their own work.
+  if (input.verified) {
+    delta += input.outcome === "unsolved" ? -4 : 5;
   }
 
   // Diminishing returns: the fifth clean solve teaches less than the first.

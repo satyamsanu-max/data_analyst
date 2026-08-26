@@ -7,14 +7,15 @@ export const dynamic = "force-dynamic";
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string }>;
+  searchParams: Promise<{ reset?: string; next?: string }>;
 }) {
   if (await getCurrentUser()) redirect("/");
-  const { reset } = await searchParams;
+  const { reset, next } = await searchParams;
   return (
     <AuthForm
       mode="signin"
       notice={reset ? "Password updated. Sign in with your new password." : undefined}
+      next={next}
     />
   );
 }

@@ -5,12 +5,12 @@ import { formatDuration, overview } from "@/lib/stats";
 import { getSettings } from "@/lib/db";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Meter, Stat } from "@/components/ui";
 import { CATEGORY_CLASS, DIFFICULTY_CLASS } from "@/lib/utils";
-import { requireUser } from "@/lib/auth";
+import { requireUserPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const user = await requireUser();
+  const user = await requireUserPage("/");
   const [plan, stats, settings] = await Promise.all([
     getOrCreateTodayPlan(user.id),
     overview(user.id),

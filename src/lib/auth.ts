@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "./db";
 import { SESSION_COOKIE } from "./auth-shared";
@@ -81,6 +82,22 @@ export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not signed in");
   return user;
+}
+
+/**
+ * For PAGES. Sends an unauthenticated visitor to sign in instead of throwing.
+ *
+ * It routes via /signed-out rather than straight to /signin because the visitor
+ * may be carrying a cookie that no longer resolves to a session — from a
+ * password reset, an expired session, or a rebuilt database. Middleware sees
+ * that cookie and bounces anyone with one away from /signin, so without the
+ * cookie-clearing hop the user would ping-pong between a redirect and a crash.
+ */
+export async function requireUserPage(currentPath?: string): Promise<SessionUser> {
+  const user = await getCurrentUser();
+  if (user) return user;
+  const q = currentPath ? `?next=${encodeURIComponent(currentPath)}` : "";
+  redirect(`/signed-out${q}`);
 }
 
 /** Housekeeping: drop sessions that have already expired. */

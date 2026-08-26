@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUserPage } from "@/lib/auth";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
 import { CATEGORY_CLASS, CATEGORY_FROM_SLUG, DIFFICULTY_CLASS, STATUS_LABEL, cn } from "@/lib/utils";
 
@@ -30,7 +30,7 @@ export default async function BankPage({ params, searchParams }: Props) {
   const filters = await searchParams;
   const category = CATEGORY_FROM_SLUG[slug];
   if (!category) notFound();
-  const user = await requireUser();
+  const user = await requireUserPage(`/bank/${slug}`);
 
   const where = {
     category,

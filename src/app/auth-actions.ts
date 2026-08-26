@@ -80,9 +80,16 @@ export async function signUpAction(_prev: AuthState, formData: FormData): Promis
   redirect("/");
 }
 
+/** Only same-site paths, so `next` cannot be used as an open redirect. */
+function safeNext(raw: unknown): string {
+  const s = String(raw ?? "");
+  return s.startsWith("/") && !s.startsWith("//") ? s : "/";
+}
+
 export async function signInAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const email = normaliseEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
+  const next = safeNext(formData.get("next"));
   if (!email || !password) return { error: BAD_CREDENTIALS };
 
   const ip = await clientIp();
@@ -123,7 +130,7 @@ export async function signInAction(_prev: AuthState, formData: FormData): Promis
   });
 
   await createSession(user.id);
-  redirect("/");
+  redirect(next);
 }
 
 export async function signOutAction(): Promise<void> {

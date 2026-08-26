@@ -3,12 +3,12 @@ import { formatDuration, overview } from "@/lib/stats";
 import { prisma } from "@/lib/db";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter, Stat } from "@/components/ui";
 import { STATUS_LABEL, categorySlug } from "@/lib/utils";
-import { requireUser } from "@/lib/auth";
+import { requireUserPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProgressPage() {
-  const user = await requireUser();
+  const user = await requireUserPage("/progress");
   const [stats, statusCounts, recent] = await Promise.all([
     overview(user.id),
     prisma.userProgress.groupBy({ where: { userId: user.id }, by: ["status"], _count: { status: true } }),

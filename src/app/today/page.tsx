@@ -4,12 +4,12 @@ import { TaskCard } from "@/components/task-card";
 import { RegenerateButton } from "@/components/regenerate-button";
 import { Meter } from "@/components/ui";
 import { getSettings } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUserPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
-  const user = await requireUser();
+  const user = await requireUserPage("/today");
   const [plan, settings] = await Promise.all([
     getOrCreateTodayPlan(user.id),
     getSettings(user.id),

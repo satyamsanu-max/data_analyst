@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUserPage } from "@/lib/auth";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
 import { SolutionReveal } from "@/components/solution-reveal";
 import { VerificationBadge } from "@/components/answer-panel";
@@ -28,7 +28,7 @@ function parseArr(s: string): string[] {
 
 export default async function QuestionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requireUserPage(`/question/${id}`);
   const q = await prisma.question.findUnique({
     where: { id },
     include: {

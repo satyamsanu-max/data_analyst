@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, getSettings } from "@/lib/db";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { CATEGORY_CLASS, DIFFICULTY_CLASS, cn } from "@/lib/utils";
-import { requireUser } from "@/lib/auth";
+import { requireUserPage } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export default async function CompaniesPage({
   searchParams: Promise<{ company?: string }>;
 }) {
   const { company: selected } = await searchParams;
-  const user = await requireUser();
+  const user = await requireUserPage("/companies");
   const [companies, settings] = await Promise.all([
     prisma.company.findMany({
       orderBy: { name: "asc" },

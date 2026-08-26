@@ -11,38 +11,73 @@ and the companies you are targeting.
 
 ---
 
-## Quick start
+## Run it on your machine
+
+Copy and paste this. It is the whole thing.
 
 ```bash
-npm install && npm run dev
+git clone https://github.com/satyamsanu-max/data_analyst.git
+cd data_analyst
+npm install
+npm run dev
 ```
 
-Then open <http://localhost:3000>.
+Open <http://localhost:3000>, click **Create an account**, and you are in.
 
-That is genuinely all. On first run the app creates its own `.env`, creates
-`prisma/dev.db`, and seeds all 588 questions before the dev server starts — it
-prints what it is doing and takes a few seconds. Subsequent runs skip straight to
-the server. No cloud account, no API keys.
+**Requirements:** Node 20 or newer (`node -v` to check) and git. Nothing else —
+no database to install, no cloud account, no API keys.
 
-Then create an account at `/signup`. Every account gets its own plan, streak,
-mastery and settings.
+The first `npm run dev` takes about a minute: it creates `.env`, builds a local
+SQLite database, and loads all 588 questions. It prints each step. Every run
+after that starts in a couple of seconds.
 
-`.env` is gitignored (it is machine-local config, not source), which is why the
-first-run guard exists: a fresh clone has no `.env`, and without one Prisma fails
-with `Environment variable not found: DATABASE_URL`.
+### If something goes wrong
+
+Almost every failure is one of these three, and the same command fixes all of
+them:
+
+```bash
+npm run setup
+```
+
+| Symptom | Cause |
+| --- | --- |
+| `Environment variable not found: DATABASE_URL` | No `.env` yet. It is gitignored, so a fresh clone has none. |
+| `The table 'main.Question' does not exist` | The database file exists but was never built — a previous run died partway. |
+| Dashboard loads but every bank shows `0 / 0` | Tables exist but the questions were never seeded. |
+
+`npm run setup` inspects what is actually there and creates only what is
+missing. It never deletes your progress, and it is safe to run at any time.
+
+Two more, which are not the app's fault but look like it:
+
+- **`EADDRINUSE: port 3000 is already in use`** — something else is on that
+  port, often an older copy of this app. Either stop it, or run
+  `npx next dev -p 3001`.
+- **A page errors with `Not signed in`** — you are carrying a session cookie
+  from an older run of the app. This is handled now: you will be sent to the
+  sign-in page automatically. If you somehow still see it, clear cookies for
+  `localhost` and sign in again.
+
+Still stuck? `npm run db:reset` rebuilds the database from scratch. It **erases
+all progress and accounts**, so treat it as a last resort.
+
+### Everyday commands
 
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Start the app on port 3000, setting up first if needed |
-| `npm run setup` | Run the first-run setup explicitly (safe to re-run; creates only what is missing) |
-| `npm run db:seed` | Re-seed questions (idempotent upsert) |
-| `npm run db:setup` | Force a full generate + push + seed |
-| `npm run db:reset` | **Destructive** — drop the DB and re-seed from scratch |
-| `npm test` | Scheduler, question-bank and grading test suites |
+| `npm run setup` | Repair whatever is missing (safe to re-run; keeps your data) |
+| `npm test` | 88 tests: scheduler, question bank, grading, credentials |
 | `npm run smoke` | End-to-end plan/swap check against the real DB |
 | `npm run smoke:verify` | End-to-end grading check (SQL judge, numeric, timer) |
 | `npm run smoke:isolation` | Proves two accounts cannot see or damage each other's data |
+| `npm run smoke:security` | Rate limiting and password-reset tokens |
+| `npm run db:seed` | Re-load the question bank (keeps progress) |
+| `npm run db:reset` | **Erases everything** and rebuilds from scratch |
 | `npm run build` | Production build |
+
+Deploying to a real URL instead? See [DEPLOY.md](DEPLOY.md).
 
 ---
 

@@ -48,7 +48,15 @@ function Field({
   );
 }
 
-export function AuthForm({ mode, notice }: { mode: "signin" | "signup"; notice?: string }) {
+export function AuthForm({
+  mode,
+  notice,
+  next,
+}: {
+  mode: "signin" | "signup";
+  notice?: string;
+  next?: string;
+}) {
   const action = mode === "signup" ? signUpAction : signInAction;
   const [state, formAction] = useActionState<AuthState, FormData>(action, undefined);
 
@@ -76,6 +84,7 @@ export function AuthForm({ mode, notice }: { mode: "signin" | "signup"; notice?:
         )}
 
         <form action={formAction} className="mt-6 space-y-4">
+          {next && <input type="hidden" name="next" value={next} />}
           {mode === "signup" && (
             <Field label="Name" name="name" placeholder="Optional" autoComplete="name" required={false} />
           )}

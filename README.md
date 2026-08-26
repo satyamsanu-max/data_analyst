@@ -33,31 +33,67 @@ after that starts in a couple of seconds.
 
 ### If something goes wrong
 
-Almost every failure is one of these three, and the same command fixes all of
-them:
+**Before anything else: make sure no old copy is still running.** This causes
+most of the confusing failures, because a stale server keeps serving old code on
+port 3000 while your new one quietly moves to 3001 — so you fix something, reload,
+and see no change.
+
+```bash
+# Windows
+taskkill /IM node.exe /F
+
+# macOS / Linux
+pkill -f "next dev"
+```
+
+Then start again with `npm run dev`.
+
+#### The errors you are likely to see
+
+**`fatal: destination path 'data_analyst' already exists and is not an empty directory`**
+
+You already cloned it. Do not clone again — just go in and update:
+
+```bash
+cd data_analyst
+git pull
+npm install
+npm run dev
+```
+
+**`EPERM: operation not permitted, rename '...query_engine-windows.dll.node'`**
+
+A dev server is running and holding Prisma's query engine open; Windows will not
+let a file in use be replaced. Stop node (above) and re-run `npm install`. As of
+now this only prints a warning instead of failing the install, but the underlying
+generate still needs the file free.
+
+**`Port 3000 is in use ... using available port 3001 instead`**
+**`Another next dev server is already running`**
+
+Your browser is showing the *old* server on :3000 while the new code runs on
+:3001. Stop node (above) and start once, or open the port the terminal actually
+printed.
+
+**`Environment variable not found: DATABASE_URL`**
+**`The table 'main.Question' does not exist`**
+**Dashboard loads but every bank shows `0 / 0`**
+
+The local database is missing, half-built, or unseeded. One command repairs all
+three:
 
 ```bash
 npm run setup
 ```
 
-| Symptom | Cause |
-| --- | --- |
-| `Environment variable not found: DATABASE_URL` | No `.env` yet. It is gitignored, so a fresh clone has none. |
-| `The table 'main.Question' does not exist` | The database file exists but was never built — a previous run died partway. |
-| Dashboard loads but every bank shows `0 / 0` | Tables exist but the questions were never seeded. |
+It inspects what is actually there and creates only what is missing. It never
+deletes your progress and is safe to run at any time.
 
-`npm run setup` inspects what is actually there and creates only what is
-missing. It never deletes your progress, and it is safe to run at any time.
+**A page shows `Not signed in`**
 
-Two more, which are not the app's fault but look like it:
-
-- **`EADDRINUSE: port 3000 is already in use`** — something else is on that
-  port, often an older copy of this app. Either stop it, or run
-  `npx next dev -p 3001`.
-- **A page errors with `Not signed in`** — you are carrying a session cookie
-  from an older run of the app. This is handled now: you will be sent to the
-  sign-in page automatically. If you somehow still see it, clear cookies for
-  `localhost` and sign in again.
+You were carrying a session cookie from an earlier run. Handled now — you are
+sent to the sign-in page and returned to the page you wanted afterwards. If you
+somehow still see it, you are on a stale server: stop node and restart.
 
 Still stuck? `npm run db:reset` rebuilds the database from scratch. It **erases
 all progress and accounts**, so treat it as a last resort.

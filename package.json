@@ -22,7 +22,7 @@
     "presmoke:verify": "node scripts/ensure-setup.mjs",
     "smoke:isolation": "tsx scripts/isolation-smoke.ts",
     "presmoke:isolation": "node scripts/ensure-setup.mjs",
-    "postinstall": "prisma generate",
+    "postinstall": "node scripts/postinstall.mjs",
     "vercel-build": "prisma generate && next build",
     "provision:practice": "tsx scripts/provision-practice.ts",
     "smoke:security": "tsx scripts/security-smoke.ts",

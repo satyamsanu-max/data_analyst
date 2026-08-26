@@ -111,7 +111,13 @@ export async function overview(userId: string): Promise<Overview> {
     categoryProgress(userId),
     currentStreak(userId),
     loadMasteryMaps(userId),
-    prisma.attempt.aggregate({ where: { userId }, _sum: { seconds: true }, _avg: { seconds: true } }),
+    // Only timed attempts have a real duration, so untimed practice must not
+    // drag the average down or inflate total study time.
+    prisma.attempt.aggregate({
+      where: { userId, timed: true },
+      _sum: { seconds: true },
+      _avg: { seconds: true },
+    }),
     prisma.attempt.count({ where: { userId } }),
     prisma.attempt.count({ where: { userId, overrun: true } }),
   ]);
@@ -182,7 +188,7 @@ export async function weeklyReview(userId: string, weeksAgo = 0): Promise<Weekly
   for (const a of attempts) {
     byCategory.set(a.question.category, (byCategory.get(a.question.category) ?? 0) + 1);
     outcomes[a.outcome] = (outcomes[a.outcome] ?? 0) + 1;
-    totalSeconds += a.seconds;
+    if (a.timed) totalSeconds += a.seconds;
     days.add(dateKey(a.createdAt));
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gradeSql, ordersMatter } from "../src/lib/verify/sql";
+import { applyAttempt, EMPTY_PROGRESS } from "../src/lib/mastery";
 import { gradeNumeric, parseAnswer } from "../src/lib/verify/numeric";
 import { runUserQuery } from "../src/lib/practice-db";
 import { resolveAnswerKeys, type AnswerSpec } from "../src/data/answers";
@@ -231,5 +232,39 @@ describe("answer keys point at the right questions", () => {
       expect(spec.ask, `${id} has no ask label`).toBeTruthy();
       expect(spec.ask.trim().length, `${id} ask label is too short`).toBeGreaterThanOrEqual(5);
     }
+  });
+});
+
+describe("untimed attempts are not scored on speed", () => {
+  // Regression: practice from a question page recorded "time since the tab
+  // opened" as solve time, which handed out a speed bonus for answering from an
+  // already-open page and an overrun penalty for thinking with the tab up.
+  const base = { outcome: "independent" as const, estimatedMinutes: 15, verified: true };
+
+  it("gives no speed bonus to an untimed fast answer", () => {
+    const timed = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 12 });
+    const untimed = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 0, timed: false });
+    expect(timed.masteryScore).toBeGreaterThan(untimed.masteryScore);
+    expect(timed.status).toBe("solved_quickly");
+    expect(untimed.status).toBe("solved");
+  });
+
+  it("gives no overrun penalty to an untimed slow answer", () => {
+    const slow = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 60 * 60 });
+    const untimed = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 0, timed: false });
+    expect(slow.timesOverrun).toBe(1);
+    expect(untimed.timesOverrun).toBe(0);
+    expect(untimed.masteryScore).toBeGreaterThan(slow.masteryScore);
+  });
+
+  it("adds no study time for an untimed attempt", () => {
+    const untimed = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 0, timed: false });
+    expect(untimed.totalSeconds).toBe(0);
+  });
+
+  it("still scores a timed attempt on speed", () => {
+    const fast = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 60 });
+    const slow = applyAttempt(EMPTY_PROGRESS, { ...base, seconds: 14 * 60 });
+    expect(fast.masteryScore).toBeGreaterThan(slow.masteryScore);
   });
 });

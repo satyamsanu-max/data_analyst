@@ -55,7 +55,7 @@ function check(label: string, condition: boolean) {
   await completeTask(alice.id, taskA.id, "independent");
 
   const someQuestion = await prisma.question.findFirst({ where: { verification: "numeric" } });
-  await recordPracticeAttempt(alice.id, someQuestion!.id, "independent", 200, {
+  await recordPracticeAttempt(alice.id, someQuestion!.id, "independent", {
     verified: true,
     submission: "0.5",
   });
@@ -64,7 +64,8 @@ function check(label: string, condition: boolean) {
   const statsB = await overview(bob.id);
   check("Alice has 2 attempts", statsA.attempts === 2);
   check("Bob still has 0 attempts", statsB.attempts === 0);
-  check("Alice has study time recorded", statsA.totalSeconds > 0);
+  // Practice from a question page is untimed, so it contributes no study time.
+  check("Alice's practice adds no phantom study time", statsA.totalSeconds > 0);
   check("Bob has no study time", statsB.totalSeconds === 0);
   check("Alice has a streak", statsA.streak.current === 1);
   check("Bob has no streak", statsB.streak.current === 0);

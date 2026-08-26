@@ -205,12 +205,11 @@ export async function resetProgressAction(): Promise<ActionResult> {
 export async function recordPracticeAttemptAction(
   questionId: string,
   outcome: Outcome,
-  seconds: number,
   graded?: { verified: boolean; submission?: string },
 ): Promise<ActionResult<{ mastery: number }>> {
   try {
     const user = await requireUser();
-    const { progress } = await recordPracticeAttempt(user.id, questionId, outcome, seconds, graded);
+    const { progress } = await recordPracticeAttempt(user.id, questionId, outcome, graded);
     refresh();
     revalidatePath(`/question/${questionId}`);
     return { ok: true, data: { mastery: progress.masteryScore } };

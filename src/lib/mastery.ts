@@ -64,6 +64,12 @@ export type AttemptInput = {
    * the numeric answer was right) rather than taking the user's word for it.
    */
   verified?: boolean;
+  /**
+   * Whether `seconds` came from a real start/stop clock. Practice from a
+   * question page is untimed: the app only knows how long the tab was open,
+   * which is not the same as how long you worked.
+   */
+  timed?: boolean;
   now?: Date;
 };
 
@@ -91,15 +97,19 @@ export const EMPTY_PROGRESS: PriorProgress = {
 export function applyAttempt(prior: PriorProgress, input: AttemptInput): ProgressState {
   const now = input.now ?? new Date();
   const estimatedSeconds = input.estimatedMinutes * 60;
-  const overran = input.seconds > estimatedSeconds * 1.5;
+  // Only a real clock earns a speed judgement. Scoring an untimed attempt on
+  // duration would reward answering fast from a page that was already open and
+  // punish thinking with the tab left up — neither reflects effort.
+  const timed = input.timed ?? true;
+  const overran = timed && input.seconds > estimatedSeconds * 1.5;
 
   let delta = BASE_DELTA[input.outcome];
 
   // Solving comfortably inside the estimate is worth more than scraping through.
-  if (input.outcome === "independent") {
+  if (timed && input.outcome === "independent") {
     if (input.seconds <= estimatedSeconds * 0.6) delta += 8; // "solved quickly"
     else if (overran) delta -= 8;
-  } else if (input.outcome !== "unsolved" && overran) {
+  } else if (timed && input.outcome !== "unsolved" && overran) {
     delta -= 4;
   }
 
@@ -120,7 +130,10 @@ export function applyAttempt(prior: PriorProgress, input: AttemptInput): Progres
     prior.hintUsedCount + (input.outcome === "minor_hint" || input.outcome === "major_hint" ? 1 : 0);
 
   const status =
-    input.outcome === "independent" && input.seconds <= estimatedSeconds * 0.6 && masteryScore < 90
+    timed &&
+    input.outcome === "independent" &&
+    input.seconds <= estimatedSeconds * 0.6 &&
+    masteryScore < 90
       ? "solved_quickly"
       : statusFor(masteryScore, input.outcome, attemptCount);
 

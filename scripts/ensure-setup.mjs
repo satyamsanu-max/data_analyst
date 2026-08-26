@@ -11,17 +11,16 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envPath = join(root, ".env");
 const envExamplePath = join(root, ".env.example");
 const dbPath = join(root, "prisma", "dev.db");
-
-const require = createRequire(import.meta.url);
 
 /**
  * Resolve a dependency's CLI entry script from its package.json `bin` field.
@@ -79,9 +78,47 @@ if (!/^\s*DATABASE_URL\s*=/m.test(readFileSync(envPath, "utf8"))) {
   process.exit(1);
 }
 
+/**
+ * Is the database actually usable, or merely present?
+ *
+ * Checking only that the file exists is not enough. Prisma creates an empty
+ * SQLite file the moment anything connects, so a run that failed before
+ * `db push` leaves a file behind that looks fine and then fails at request time
+ * with "The table `main.Question` does not exist". Verify the schema is applied
+ * AND the bank is seeded.
+ */
+function databaseState() {
+  if (!existsSync(dbPath)) return "missing";
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const hasTable = db
+        .prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='Question'")
+        .get().n;
+      if (!hasTable) return "no-schema";
+      const rows = db.prepare("SELECT COUNT(*) AS n FROM Question").get().n;
+      return rows > 0 ? "ready" : "empty";
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Cannot introspect (older Node, locked file). Treat as unknown and let
+    // Prisma decide — `db push` and the seeder are both idempotent.
+    return "unknown";
+  }
+}
+
 // 2. Database + seeded question bank
-if (!existsSync(dbPath)) {
-  console.log("No local database found — creating and seeding it (first run only)...");
+const state = databaseState();
+if (state !== "ready") {
+  const why = {
+    missing: "No local database found",
+    "no-schema": "The database exists but has no tables",
+    empty: "The database has no questions",
+    unknown: "Could not inspect the database",
+  }[state];
+  console.log(`${why} — creating and seeding it...`);
   run("prisma", ["generate"]);
   run("prisma", ["db", "push", "--skip-generate"]);
   run("tsx", ["prisma/seed.ts"]);

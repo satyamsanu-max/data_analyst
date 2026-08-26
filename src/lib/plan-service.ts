@@ -383,7 +383,7 @@ export async function completeTask(
     await prisma.dailyPlan.update({ where: { id: task.planId }, data: { status: "completed" } });
   }
 
-  return { progress: next, overran };
+  return { progress: next, overran: false };
 }
 
 /**
@@ -443,7 +443,6 @@ export async function recordPracticeAttempt(
   userId: string,
   questionId: string,
   outcome: Outcome,
-  seconds: number,
   graded?: { verified: boolean; submission?: string },
 ) {
   const question = await prisma.question.findUnique({ where: { id: questionId } });
@@ -465,13 +464,15 @@ export async function recordPracticeAttempt(
     },
     {
       outcome,
-      seconds,
+      // Untimed: the question page has no start/stop clock, so there is no
+      // honest duration to record. Reporting "time since the tab opened" would
+      // hand out speed bonuses and overrun penalties that mean nothing.
+      seconds: 0,
+      timed: false,
       estimatedMinutes: question.estimatedMinutes,
       verified: graded?.verified ?? false,
     },
   );
-
-  const overran = seconds > question.estimatedMinutes * 60 * 1.5;
 
   await prisma.$transaction([
     prisma.userProgress.upsert({
@@ -483,15 +484,16 @@ export async function recordPracticeAttempt(
       data: {
         userId,
         questionId,
-        seconds: Math.max(0, Math.round(seconds)),
+        seconds: 0,
+        timed: false,
         outcome,
         hintUsed: outcome === "minor_hint" || outcome === "major_hint",
-        overrun: overran,
+        overrun: false,
         verified: graded?.verified ?? false,
         submission: graded?.submission ?? null,
       },
     }),
   ]);
 
-  return { progress: next, overran };
+  return { progress: next, overran: false };
 }

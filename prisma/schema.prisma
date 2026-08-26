@@ -256,6 +256,11 @@ model Attempt {
   /// True when the app graded this objectively (SQL result set or numeric answer)
   /// rather than taking the user's word for it.
   verified   Boolean  @default(false)
+  /// True when `seconds` came from a real start/stop clock, as in a scheduled
+  /// session. False for practice from a question page, where the app cannot
+  /// know how long you actually worked — untimed attempts are excluded from
+  /// solve-time statistics and never earn a speed bonus or an overrun penalty.
+  timed      Boolean  @default(true)
   /// The submission itself, kept so the attempt history is reviewable.
   submission String?
 

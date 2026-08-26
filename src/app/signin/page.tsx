@@ -4,7 +4,17 @@ import { AuthForm } from "@/components/auth-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reset?: string }>;
+}) {
   if (await getCurrentUser()) redirect("/");
-  return <AuthForm mode="signin" />;
+  const { reset } = await searchParams;
+  return (
+    <AuthForm
+      mode="signin"
+      notice={reset ? "Password updated. Sign in with your new password." : undefined}
+    />
+  );
 }

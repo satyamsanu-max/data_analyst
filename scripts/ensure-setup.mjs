@@ -43,6 +43,21 @@ function binScript(pkg) {
 const run = (pkg, args) =>
   execFileSync(process.execPath, [binScript(pkg), ...args], { cwd: root, stdio: "inherit" });
 
+/**
+ * Hosted builds bring their own database and run migrations deliberately, so
+ * this first-run helper must not fire there. Without the guard, a Vercel build
+ * would try to create a local SQLite file and seed it.
+ */
+const hosted =
+  process.env.VERCEL === "1" ||
+  process.env.CI === "true" ||
+  (process.env.DATABASE_URL ?? "").startsWith("postgres");
+
+if (hosted) {
+  console.log("Hosted environment detected - skipping local first-run setup.");
+  process.exit(0);
+}
+
 let didSomething = false;
 
 // 1. Environment file

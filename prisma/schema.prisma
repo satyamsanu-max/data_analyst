@@ -63,16 +63,16 @@ model Question {
 
   estimatedMinutes Int
 
-  sourceId  String?
-  source    Source? @relation(fields: [sourceId], references: [id])
-  sourceUrl String?
+  sourceId   String?
+  source     Source? @relation(fields: [sourceId], references: [id])
+  sourceUrl  String?
   /// Free-text attribution shown in the UI, e.g. "NeetCode 150".
   sourceNote String?
 
   /// How often this shows up in real interviews (0-100).
-  frequencyScore Int @default(50)
+  frequencyScore  Int @default(50)
   /// How much reusable pattern leverage it gives (0-100).
-  patternValue Int @default(50)
+  patternValue    Int @default(50)
   /// How much distinct concept surface it covers (0-100).
   conceptCoverage Int @default(50)
 
@@ -121,11 +121,12 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  settings UserSettings?
-  progress UserProgress[]
-  plans    DailyPlan[]
-  attempts Attempt[]
-  sessions Session[]
+  settings    UserSettings?
+  progress    UserProgress[]
+  plans       DailyPlan[]
+  attempts    Attempt[]
+  sessions    Session[]
+  resetTokens PasswordResetToken[]
 }
 
 /// Server-side session. Revocable, unlike a self-contained token.
@@ -141,54 +142,80 @@ model Session {
   @@index([userId])
 }
 
+/// Fixed-window counter for rate limiting.
+///
+/// Lives in the database rather than in memory because a serverless deployment
+/// runs many instances — an in-process counter would reset on every cold start
+/// and be trivially bypassed.
+model RateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  windowEnd DateTime
+
+  @@index([windowEnd])
+}
+
+/// One-time password reset token. Only its SHA-256 is stored.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
 model UserSettings {
-  id               String  @id @default(cuid())
-  userId           String  @unique
-  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyMinutes     Int     @default(150)
-  difficultyMode   String  @default("balanced") // balanced | easy-first | interview-hard
-  targetRole       String  @default("Data Analyst")
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyMinutes    Int      @default(150)
+  difficultyMode  String   @default("balanced") // balanced | easy-first | interview-hard
+  targetRole      String   @default("Data Analyst")
   /// JSON array of company slugs.
-  targetCompanies  String  @default("[]")
-  theme            String  @default("dark")
-  startDate        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  targetCompanies String   @default("[]")
+  theme           String   @default("dark")
+  startDate       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model UserProgress {
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionId      String
-  question        Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  status          String    @default("not_started") // not_started|attempted|solved|solved_quickly|solved_with_hint|failed|needs_review|mastered
-  attemptCount    Int       @default(0)
-  failedCount     Int       @default(0)
-  hintUsedCount   Int       @default(0)
-  lastAttemptDate DateTime?
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  status           String    @default("not_started") // not_started|attempted|solved|solved_quickly|solved_with_hint|failed|needs_review|mastered
+  attemptCount     Int       @default(0)
+  failedCount      Int       @default(0)
+  hintUsedCount    Int       @default(0)
+  lastAttemptDate  DateTime?
   /// Seconds, most recent successful/attempted solve.
   lastSolveSeconds Int?
-  totalSeconds    Int       @default(0)
+  totalSeconds     Int       @default(0)
   /// 0-100.
-  masteryScore    Int       @default(0)
+  masteryScore     Int       @default(0)
   /// Spaced repetition: when this should resurface.
-  nextReviewDate  DateTime?
-  timesOverrun    Int       @default(0)
+  nextReviewDate   DateTime?
+  timesOverrun     Int       @default(0)
 
   @@id([userId, questionId])
   @@index([questionId])
 }
 
 model DailyPlan {
-  id            String     @id @default(cuid())
-  userId        String
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dayNumber     Int
-  date          String     // yyyy-mm-dd, local
-  targetMinutes Int
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayNumber      Int
+  date           String // yyyy-mm-dd, local
+  targetMinutes  Int
   plannedMinutes Int
-  status        String     @default("active") // active | completed
-  createdAt     DateTime   @default(now())
-  tasks         DailyTask[]
+  status         String      @default("active") // active | completed
+  createdAt      DateTime    @default(now())
+  tasks          DailyTask[]
 
   @@unique([userId, date])
   @@unique([userId, dayNumber])

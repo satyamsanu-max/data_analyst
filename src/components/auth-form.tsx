@@ -48,7 +48,7 @@ function Field({
   );
 }
 
-export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
+export function AuthForm({ mode, notice }: { mode: "signin" | "signup"; notice?: string }) {
   const action = mode === "signup" ? signUpAction : signInAction;
   const [state, formAction] = useActionState<AuthState, FormData>(action, undefined);
 
@@ -68,6 +68,12 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             ? "Your plan, streak and mastery are yours alone."
             : "Sign in to pick up where you left off."}
         </p>
+
+        {notice && (
+          <p className="mt-4 rounded-md border border-easy/40 bg-easy/10 px-3 py-2 text-sm text-easy">
+            {notice}
+          </p>
+        )}
 
         <form action={formAction} className="mt-6 space-y-4">
           {mode === "signup" && (
@@ -99,6 +105,14 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
           )}
 
           <Submit label={mode === "signup" ? "Create account" : "Sign in"} />
+
+          {mode === "signin" && (
+            <p className="text-center text-xs">
+              <Link href="/forgot" className="text-muted-foreground hover:text-primary hover:underline">
+                Forgotten your password?
+              </Link>
+            </p>
+          )}
         </form>
       </div>
 

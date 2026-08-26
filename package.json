@@ -21,7 +21,12 @@
     "smoke:verify": "tsx scripts/verify-smoke.ts",
     "presmoke:verify": "node scripts/ensure-setup.mjs",
     "smoke:isolation": "tsx scripts/isolation-smoke.ts",
-    "presmoke:isolation": "node scripts/ensure-setup.mjs"
+    "presmoke:isolation": "node scripts/ensure-setup.mjs",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma generate && next build",
+    "provision:practice": "tsx scripts/provision-practice.ts",
+    "smoke:security": "tsx scripts/security-smoke.ts",
+    "presmoke:security": "node scripts/ensure-setup.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.7",
@@ -30,6 +35,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
     "next": "^16.3.3",
+    "pg": "^8.23.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "server-only": "^0.0.1",
@@ -37,6 +43,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",

@@ -9,7 +9,7 @@ import { SESSION_COOKIE } from "@/lib/auth-shared";
  * page and server action; this just avoids rendering an app shell for someone
  * who is plainly signed out.
  */
-const PUBLIC_PATHS = ["/signin", "/signup"];
+const PUBLIC_PATHS = ["/signin", "/signup", "/forgot", "/reset"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

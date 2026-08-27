@@ -29,82 +29,94 @@ Postgres, with no database to provision.
 
 ---
 
+## What only you can do
+
+Two accounts, both free, both need a real person to sign up:
+
+1. **Neon** — <https://neon.tech> — the database
+2. **Vercel** — <https://vercel.com> — the app
+
+Everything after that is one command.
+
+---
+
 ## 1. Create the database
 
-1. Create a project at <https://neon.tech>.
-2. Copy the connection string. It looks like:
-   `postgresql://USER:PASSWORD@ep-xxx.region.aws.neon.tech/neondb?sslmode=require`
+Sign up at Neon, create a project, and copy the connection string. It looks like:
 
-## 2. Point the schema at Postgres
-
-In `prisma/schema.prisma`:
-
-```prisma
-datasource db {
-  provider = "postgresql"   // was "sqlite"
-  url      = env("DATABASE_URL")
-}
+```
+postgresql://USER:PASSWORD@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
 ```
 
-Nothing else in the data model changes.
-
-## 3. Create the tables and load the question bank
-
-From your machine, against Neon:
+## 2. Prepare it — one command
 
 ```bash
-DATABASE_URL="postgresql://..." npx prisma db push
-DATABASE_URL="postgresql://..." npx tsx prisma/seed.ts
+DATABASE_URL="postgresql://...paste yours here..." npm run deploy:prepare
 ```
 
-The seeder validates the bank, proves which SQL questions are gradable by
-executing each reference, and loads all 588 questions.
-
-## 4. Provision the practice database and its read-only role
-
-```bash
-DATABASE_URL="postgresql://..." npm run provision:practice
-```
-
-This creates the `practice` schema, seeds it, creates the `practice_ro` role,
-and prints a `PRACTICE_DATABASE_URL`. It also runs an isolation check:
+That does all four steps in order: points Prisma at Postgres, creates the
+tables, loads all 588 questions, and builds the `practice` schema with its
+read-only role. It finishes by verifying the lockdown:
 
 ```
 Verifying isolation...
   PASS  can read practice.users (300 rows)
   PASS  blocked from public."User"
   PASS  blocked from public."Attempt"
-  PASS  blocked from public."Session"
   PASS  blocked from writing
 ```
 
-**If any line says FAIL, do not deploy.** Save the printed URL.
+**If any line says FAIL, stop — do not deploy.**
 
-## 5. Deploy
+It then prints a `PRACTICE_DATABASE_URL`. Keep it for step 4.
 
-Import the GitHub repo at <https://vercel.com/new>. Vercel detects Next.js and
-runs the `vercel-build` script, which generates the Prisma client and builds.
+> You no longer edit `schema.prisma` by hand. The provider is derived from
+> `DATABASE_URL`, so a postgres:// string means Postgres and everything else
+> means local SQLite. Running any local command without `DATABASE_URL` set puts
+> it back automatically.
 
-Schema changes are applied deliberately from your machine (step 3), never during
-a deploy — a build should not be able to alter your production database.
+## 3. Deploy the app
 
-## 6. Environment variables
+Go to <https://vercel.com/new>, import `satyamsanu-max/data_analyst`, and deploy.
+Vercel detects Next.js and runs `vercel-build` on its own.
 
-Set these in **Project Settings → Environment Variables**:
+The first deploy will fail to load data — that is expected, the environment
+variables are not set yet.
+
+## 4. Set the environment variables
+
+**Project Settings → Environment Variables:**
 
 | Variable | Required | Value |
 | --- | --- | --- |
-| `DATABASE_URL` | yes | Your Neon connection string (application role) |
-| `PRACTICE_DATABASE_URL` | yes | Printed by step 4 (read-only role) |
-| `APP_URL` | yes | `https://your-app.vercel.app` — used to build reset links |
-| `RESEND_API_KEY` | for reset emails | From <https://resend.com> (free tier: 3,000/month) |
+| `DATABASE_URL` | yes | The Neon string from step 1 |
+| `PRACTICE_DATABASE_URL` | yes | Printed by step 2 (the read-only role) |
+| `APP_URL` | yes | `https://your-app.vercel.app` — builds reset links |
+| `RESEND_API_KEY` | for reset emails | <https://resend.com> — free tier, 3,000/month |
 | `RESET_EMAIL_FROM` | optional | e.g. `Interview Prep <noreply@yourdomain.com>` |
 
-Without `RESEND_API_KEY` the reset flow still works, but the link is written to
+Then **redeploy** — Vercel does not apply new variables to an existing build.
+
+Without `RESEND_API_KEY` password reset still works, but the link is written to
 the server log instead of emailed. Fine for testing, useless for real users.
 
-Redeploy after setting them — Vercel does not apply new variables to an existing
-build.
+## 5. Check it
+
+1. Open the URL, create an account, confirm you land on a Day 1 dashboard.
+2. Open a SQL question, submit a correct query, confirm it grades.
+3. Sign out, request a password reset, confirm the email arrives.
+4. Enter a wrong password nine times and confirm you get rate limited.
+
+---
+
+## Schema changes later
+
+Deliberately **not** part of the build — a deploy should not be able to alter a
+production database. When you change the schema, apply it yourself:
+
+```bash
+DATABASE_URL="postgresql://..." npx prisma db push
+```
 
 ---
 
@@ -153,7 +165,7 @@ variable is set.
 ## Verifying a deployment
 
 ```bash
-npm test              # 84 tests
+npm test              # 88 tests
 npm run smoke:security   # rate limiting + reset tokens
 npm run smoke:isolation  # two accounts cannot see each other
 ```

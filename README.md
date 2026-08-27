@@ -113,7 +113,15 @@ all progress and accounts**, so treat it as a last resort.
 | `npm run db:reset` | **Erases everything** and rebuilds from scratch |
 | `npm run build` | Production build |
 
-Deploying to a real URL instead? See [DEPLOY.md](DEPLOY.md).
+### Putting it online
+
+Two free accounts (Neon for the database, Vercel for the app), then one command:
+
+```bash
+DATABASE_URL="postgresql://...your neon string..." npm run deploy:prepare
+```
+
+Full walkthrough in [DEPLOY.md](DEPLOY.md).
 
 ---
 

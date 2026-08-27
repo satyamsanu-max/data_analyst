@@ -76,10 +76,10 @@ function scopeSeed(seed: string): string {
   console.log(`\nCreating the read-only role "${ROLE}"...`);
   const exists = await client.query(`SELECT 1 FROM pg_roles WHERE rolname = $1`, [ROLE]);
   if (exists.rowCount) {
-    await client.query(`ALTER ROLE ${ROLE} WITH LOGIN PASSWORD $1`, [password]);
+    await client.query(`ALTER ROLE ${ROLE} WITH LOGIN PASSWORD '${password.replace("'", "''")}'`);
     console.log("  role already existed; password rotated");
   } else {
-    await client.query(`CREATE ROLE ${ROLE} WITH LOGIN PASSWORD $1`, [password]);
+    await client.query(`CREATE ROLE ${ROLE} WITH LOGIN PASSWORD '${password.replace("'", "''")}'`);
   }
 
   // Strip everything, then grant back only the practice schema.
@@ -155,3 +155,5 @@ async function currentDbIdent(c: Client): Promise<string> {
   const db = await currentDb(c);
   return `"${db.replace(/"/g, '""')}"`;
 }
+
+

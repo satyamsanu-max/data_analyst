@@ -305,3 +305,59 @@ export async function weakCategories(userId: string, section?: string) {
     .sort((a, b) => a.pct - b.pct)
     .slice(0, 8);
 }
+
+/** Overall Deep Dive progress, and per-domain rollup for the progress page. */
+export async function deepDiveOverview(userId: string) {
+  const sections = await sectionSummaries(userId);
+
+  const domains: Domain[] = ["DATA", "PRODUCT", "CONSULTING"];
+  const byDomain = domains.map((domain) => {
+    const rows = sections.filter((s) => s.domain === domain);
+    const conceptTotal = rows.reduce((a, s) => a + s.conceptTotal, 0);
+    const questionTotal = rows.reduce((a, s) => a + s.questionTotal, 0);
+    const conceptDone = rows.reduce((a, s) => a + s.conceptDone, 0);
+    const questionDone = rows.reduce((a, s) => a + s.questionDone, 0);
+    return {
+      domain,
+      sections: rows,
+      conceptTotal,
+      questionTotal,
+      conceptDone,
+      questionDone,
+      total: conceptTotal + questionTotal,
+      done: conceptDone + questionDone,
+    };
+  });
+
+  const statusCounts = await prisma.deepDiveProgress.groupBy({
+    where: { userId },
+    by: ["status"],
+    _count: { status: true },
+  });
+
+  const bookmarked = await prisma.deepDiveProgress.count({ where: { userId, bookmarked: true } });
+
+  const recent = await prisma.deepDiveProgress.findMany({
+    where: { userId, status: { not: "NOT_STARTED" } },
+    include: { content: { select: { id: true, title: true, section: true, contentType: true } } },
+    orderBy: { updatedAt: "desc" },
+    take: 12,
+  });
+
+  return {
+    byDomain,
+    total: sections.reduce((a, s) => a + s.total, 0),
+    done: sections.reduce((a, s) => a + s.conceptDone + s.questionDone, 0),
+    statusCounts: Object.fromEntries(statusCounts.map((s) => [s.status, s._count.status])),
+    bookmarked,
+    recent: recent.map((r) => ({
+      id: r.contentId,
+      title: r.content.title,
+      section: r.content.section,
+      sectionName: SECTION_BY_SLUG[r.content.section]?.name ?? r.content.section,
+      contentType: r.content.contentType,
+      status: r.status as ProgressStatus,
+      updatedAt: r.updatedAt,
+    })),
+  };
+}

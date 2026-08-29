@@ -12,9 +12,11 @@ import { RCA_CONCEPTS } from "./root-cause/concepts";
 import { RCA_QUESTIONS } from "./root-cause/questions";
 import { PRODUCT_CONCEPTS } from "./product/concepts";
 import { PRODUCT_CASES } from "./product/cases";
+import { PRODUCT_QUESTIONS } from "./product/questions";
 import { PRODUCT_GUESSTIMATES } from "./product/guesstimates";
 import { CONSULTING_CONCEPTS } from "./consulting/concepts";
 import { CONSULTING_CASES } from "./consulting/cases";
+import { CONSULTING_QUESTIONS } from "./consulting/questions";
 import { CONSULTING_GUESSTIMATES } from "./consulting/guesstimates";
 import { INDUSTRY_PRIMERS } from "./consulting/industries";
 import { validateDeepDive, contentReport } from "./validate";
@@ -35,9 +37,11 @@ export const ALL_DEEP_DIVE: DeepDiveItem[] = [
   ...RCA_QUESTIONS,
   ...PRODUCT_CONCEPTS,
   ...PRODUCT_CASES,
+  ...PRODUCT_QUESTIONS,
   ...PRODUCT_GUESSTIMATES,
   ...CONSULTING_CONCEPTS,
   ...CONSULTING_CASES,
+  ...CONSULTING_QUESTIONS,
   ...CONSULTING_GUESSTIMATES,
   ...INDUSTRY_PRIMERS,
 ];

@@ -1,22 +1,29 @@
 import Link from "next/link";
 import { requireUserPage } from "@/lib/auth";
-import { domainSummaries } from "@/lib/deep-dive-service";
-import { Badge, Card, CardContent, CardHeader, CardTitle, Meter } from "@/components/ui";
-import { DOMAIN_BLURB, DOMAIN_LABEL } from "@/data/deep-dive/types";
+import { deepDiveOverview } from "@/lib/deep-dive-service";
+import { Badge, Meter } from "@/components/ui";
+import { DOMAIN_BLURB, DOMAIN_LABEL, type Domain } from "@/data/deep-dive/types";
 import { DD_DOMAIN_CLASS } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The Deep Dive hub.
+ *
+ * Two doors — Learn and Practice — and nothing else above them. Everything a
+ * topic used to need its own page for now lives inside those two, so reaching
+ * any single item is two clicks from here.
+ */
 export default async function DeepDivePage() {
   const user = await requireUserPage("/deep-dive");
-  const domains = await domainSummaries(user.id);
+  const overview = await deepDiveOverview(user.id);
+  const pct = (overview.done / Math.max(1, overview.total)) * 100;
 
-  const grand = domains.flatMap((d) => d.sections);
-  const totalItems = grand.reduce((a, s) => a + s.total, 0);
-  const totalDone = grand.reduce((a, s) => a + s.conceptDone + s.questionDone, 0);
+  const concepts = overview.byDomain.reduce((a, d) => a + d.conceptTotal, 0);
+  const questions = overview.byDomain.reduce((a, d) => a + d.questionTotal, 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       <div>
         <div className="stat-label">Library</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
@@ -26,88 +33,115 @@ export default async function DeepDivePage() {
           Master the concepts. Then practice questions actually reported in interviews.
         </p>
         <div className="mt-4 flex max-w-md items-center gap-3">
-          <Meter value={(totalDone / Math.max(1, totalItems)) * 100} className="flex-1" />
+          <Meter value={pct} className="flex-1" />
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-            {totalDone} / {totalItems}
+            {overview.done} / {overview.total}
           </span>
         </div>
-        <p className="mt-3 max-w-2xl text-xs text-muted-foreground">
-          Deep Dive is a separate library from your Daily Practice plan. Nothing you do here changes
-          today&rsquo;s session, your streak, or your mastery scores.
-        </p>
       </div>
 
-      {domains.map(({ domain, sections }) => (
-        <section key={domain} className="space-y-3">
-          <div className="flex flex-wrap items-baseline gap-3">
-            <Badge className={DD_DOMAIN_CLASS[domain]}>{DOMAIN_LABEL[domain].toUpperCase()}</Badge>
-            <p className="text-xs text-muted-foreground">{DOMAIN_BLURB[domain]}</p>
-          </div>
+      {/* ----------------------------------------------------- the two doors */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Door
+          href="/deep-dive/learn"
+          eyebrow="Part 1"
+          title="Learn"
+          body="Excel, Power BI, Tableau, Root Cause Analysis, Product and Consulting — the concept behind each, with worked examples and the mistakes people make."
+          count={`${concepts} concepts`}
+          done={overview.byDomain.reduce((a, d) => a + d.conceptDone, 0)}
+          total={concepts}
+        />
+        <Door
+          href="/deep-dive/practice"
+          eyebrow="Part 2"
+          title="Practice"
+          body="Interview questions and cases across the same topics. Attempt, take a hint, then compare against a full answer with the sources it came from."
+          count={`${questions} questions & cases`}
+          done={overview.byDomain.reduce((a, d) => a + d.questionDone, 0)}
+          total={questions}
+        />
+      </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {sections.map((s) => (
-              <Card key={s.slug} className="flex flex-col">
-                <CardHeader>
-                  <CardTitle>
-                    <Link href={`/deep-dive/${s.slug}`} className="hover:text-primary">
-                      {s.name}
-                    </Link>
-                  </CardTitle>
-                  <p className="text-xs leading-relaxed text-muted-foreground">{s.blurb}</p>
-                </CardHeader>
-                <CardContent className="mt-auto space-y-3">
-                  <Line
-                    label="Concepts"
-                    done={s.conceptDone}
-                    total={s.conceptTotal}
-                    href={`/deep-dive/${s.slug}/concepts`}
-                  />
-                  <Line
-                    label={s.slug === "industry-primers" ? "Primers" : "Interview questions"}
-                    done={s.questionDone}
-                    total={s.questionTotal}
-                    href={`/deep-dive/${s.slug}/questions`}
-                  />
-                </CardContent>
-              </Card>
-            ))}
+      {/* ------------------------------------------------------ what is inside */}
+      <div className="grid gap-3 md:grid-cols-3">
+        {overview.byDomain.map((d) => (
+          <div key={d.domain} className="surface p-4">
+            <div className="flex items-center justify-between gap-2">
+              <Badge className={DD_DOMAIN_CLASS[d.domain as Domain]}>
+                {DOMAIN_LABEL[d.domain as Domain]}
+              </Badge>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {d.done} / {d.total}
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {DOMAIN_BLURB[d.domain as Domain]}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {d.sections.map((s) => (
+                <Link
+                  key={s.slug}
+                  href={
+                    s.conceptTotal > 0
+                      ? `/deep-dive/learn?topic=${s.slug}`
+                      : `/deep-dive/practice?topic=${s.slug}`
+                  }
+                >
+                  <Badge className="hover:border-primary hover:text-primary">{s.name}</Badge>
+                </Link>
+              ))}
+            </div>
           </div>
-        </section>
-      ))}
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <Link href="/deep-dive/progress" className="text-primary hover:underline">
+          Deep Dive progress →
+        </Link>
+        <Link href="/deep-dive/search" className="text-primary hover:underline">
+          Search the library →
+        </Link>
+        <span>
+          Separate from your Daily Practice plan — nothing here changes today&rsquo;s session, your
+          streak, or your mastery scores.
+        </span>
+      </div>
     </div>
   );
 }
 
-function Line({
-  label,
+function Door({
+  href,
+  eyebrow,
+  title,
+  body,
+  count,
   done,
   total,
-  href,
 }: {
-  label: string;
+  href: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  count: string;
   done: number;
   total: number;
-  href: string;
 }) {
-  if (total === 0) {
-    return (
-      <div className="flex items-center justify-between text-xs text-muted-foreground/60">
-        <span>{label}</span>
-        <span>—</span>
-      </div>
-    );
-  }
   return (
-    <div>
-      <div className="flex items-center justify-between text-xs">
-        <Link href={href} className="font-medium hover:text-primary hover:underline">
-          {label}
-        </Link>
-        <span className="tabular-nums text-muted-foreground">
-          {done} / {total}
-        </span>
+    <Link
+      href={href}
+      className="surface group flex flex-col p-6 transition-colors hover:border-primary/40"
+    >
+      <div className="stat-label">{eyebrow}</div>
+      <h2 className="mt-1 text-xl font-semibold tracking-tight group-hover:text-primary">
+        {title}
+      </h2>
+      <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <div className="mt-4 flex items-center gap-3">
+        <Meter value={(done / Math.max(1, total)) * 100} className="h-1.5 flex-1" />
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{count}</span>
       </div>
-      <Meter value={(done / Math.max(1, total)) * 100} className="mt-1 h-1.5" />
-    </div>
+    </Link>
   );
 }

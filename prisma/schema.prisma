@@ -127,6 +127,7 @@ model User {
   attempts    Attempt[]
   sessions    Session[]
   resetTokens PasswordResetToken[]
+  deepDive    DeepDiveProgress[]
 }
 
 /// Server-side session. Revocable, unlike a self-contained token.
@@ -266,4 +267,142 @@ model Attempt {
 
   @@index([userId, createdAt])
   @@index([questionId])
+}
+
+// ---------------------------------------------------------------------------
+// Deep Dive into Data & Product
+//
+// A SEPARATE library from the Data Analyst question bank. These rows live in
+// their own tables on purpose: `loadSchedulerQuestions()` reads the whole
+// `Question` table with no WHERE clause, so anything stored there would become
+// eligible for the 150-minute Daily Practice plan the moment it was seeded.
+// Keeping Deep Dive out of `Question` makes that leak structurally impossible
+// rather than a flag someone has to remember to set.
+// ---------------------------------------------------------------------------
+
+/// One piece of Deep Dive material: a concept, an interview question, a case,
+/// a guesstimate, or an industry primer.
+model DeepDiveContent {
+  id String @id
+
+  /// DATA | PRODUCT | CONSULTING. Kept as a string so a new domain is a data
+  /// change, not a migration.
+  domain      String
+  /// Slug within the domain, e.g. "excel", "power-bi", "root-cause".
+  section     String
+  /// CONCEPT | QUESTION | CASE | GUESSTIMATE | INDUSTRY_PRIMER
+  contentType String
+  /// Filter bucket within the section, e.g. "Lookup", "DAX", "Profitability".
+  category    String
+
+  title      String
+  difficulty String @default("Medium") // Easy | Medium | Hard
+
+  /// The prompt itself. Null for CONCEPT rows, which lead with `explanation`.
+  question            String?
+  /// Nudges the candidate's thinking without giving away the answer.
+  hint                String?
+  /// What a candidate could actually say out loud to an interviewer.
+  interviewAnswer     String?
+  /// The deepest teaching section: reasoning, worked steps, edge cases.
+  detailedExplanation String?
+
+  /// Concept-page body (what it is / how it works / when to use it).
+  explanation    String?
+  /// Worked example, kept separate so the UI can style it as a callout.
+  example        String?
+  /// Formula / DAX / Tableau calc / SQL, as JSON [{ lang, label, code }].
+  codeBlocks     String  @default("[]")
+  /// Named framework this follows, e.g. "CIRCLES", "Profitability Tree".
+  framework      String?
+  /// JSON string array.
+  commonMistakes String  @default("[]")
+  /// JSON string array of likely interviewer follow-ups.
+  followUps      String  @default("[]")
+  /// JSON string array of other DeepDiveContent ids (concepts <-> questions).
+  relatedIds     String  @default("[]")
+  /// JSON string array, powers the filter chips and search.
+  tags           String  @default("[]")
+
+  /// Evidence-based attribution ONLY. Null means the source did not say, which
+  /// is very different from "unknown company" — never guessed or inferred.
+  company String?
+  role    String?
+  year    Int?
+
+  /// REAL_INTERVIEW | INTERVIEW_EXPERIENCE | CASEBOOK_INTERVIEW_CASE |
+  /// COMMON_INTERVIEW_QUESTION | ADAPTED_PRACTICE
+  /// Governs the badge shown in the UI. Only the first three may claim a real
+  /// interview, and only with a source to back it.
+  sourceType String
+  /// high | medium | low — how well the sources support the claim.
+  confidence String @default("medium")
+
+  /// Cross-reference to the existing Data Analyst bank, so shared material
+  /// (the 35 seeded guesstimates) is surfaced here rather than duplicated.
+  existingQuestionId String?
+
+  /// Deep Dive rows are never Daily Practice candidates. Both flags exist so
+  /// the intent is greppable and assertable in tests, not just implied by
+  /// which table the row happens to sit in.
+  isDeepDive              Boolean @default(true)
+  isDailyPracticeEligible Boolean @default(false)
+
+  sources  DeepDiveSource[]
+  progress DeepDiveProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([domain, section])
+  @@index([contentType])
+  @@index([section, contentType])
+  @@index([company])
+}
+
+/// A citation. One canonical question can carry several of these — that is how
+/// deduplication works: the same question found on GitHub, GeeksforGeeks and in
+/// a casebook stays ONE row with three sources, never three rows.
+model DeepDiveSource {
+  id        String          @id @default(cuid())
+  contentId String
+  content   DeepDiveContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  /// CASEBOOK | GITHUB | GEEKSFORGEEKS | GLASSDOOR | INTERVIEW_REPORT |
+  /// PUBLIC_ASSESSMENT | ADAPTED | COMMON_INTERVIEW
+  sourceType String
+  name       String
+  title      String?
+  url        String?
+  /// Page number for casebook sources.
+  page       Int?
+  /// Why we believe this source supports the claim, in one line.
+  evidence   String?
+
+  @@index([contentId])
+}
+
+/// Deep Dive progress. Deliberately NOT `UserProgress`: that table is keyed to
+/// `Question` by foreign key and feeds mastery, streaks and the scheduler.
+/// Writing Deep Dive activity there would move Daily Practice numbers.
+model DeepDiveProgress {
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId String
+  content   DeepDiveContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  /// NOT_STARTED | ATTEMPTED | SOLVED | NEEDS_REVIEW
+  status     String  @default("NOT_STARTED")
+  attempts   Int     @default(0)
+  bookmarked Boolean @default(false)
+  /// True once the user has revealed the answer, so the UI can show "seen".
+  revealed   Boolean @default(false)
+
+  lastAttemptedAt DateTime?
+  solvedAt        DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@id([userId, contentId])
+  @@index([contentId])
+  @@index([userId, status])
 }

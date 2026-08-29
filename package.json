@@ -27,7 +27,10 @@
     "provision:practice": "tsx scripts/provision-practice.ts",
     "smoke:security": "tsx scripts/security-smoke.ts",
     "presmoke:security": "node scripts/ensure-setup.mjs",
-    "deploy:prepare": "node scripts/deploy-prepare.mjs"
+    "deploy:prepare": "node scripts/deploy-prepare.mjs",
+    "db:seed:deep-dive": "tsx prisma/seed-deep-dive.ts",
+    "predb:seed:deep-dive": "node scripts/ensure-setup.mjs",
+    "validate:deep-dive": "tsx scripts/validate-deep-dive.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.7",

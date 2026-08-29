@@ -59,3 +59,47 @@ export const STATUS_LABEL: Record<string, string> = {
   needs_review: "Needs review",
   mastered: "Mastered",
 };
+
+// ---------------------------------------------------------------- Deep Dive
+// Additive only: nothing above this line changes, so the Data Analyst pages
+// that import CATEGORY_CLASS / STATUS_LABEL behave exactly as before.
+
+export const DD_STATUS_LABEL: Record<string, string> = {
+  NOT_STARTED: "Not started",
+  ATTEMPTED: "Attempted",
+  SOLVED: "Solved",
+  NEEDS_REVIEW: "Needs review",
+};
+
+export const DD_STATUS_CLASS: Record<string, string> = {
+  SOLVED: "border-easy/30 bg-easy/10 text-easy",
+  NEEDS_REVIEW: "border-hard/30 bg-hard/10 text-hard",
+  ATTEMPTED: "border-medium/30 bg-medium/10 text-medium",
+};
+
+/**
+ * Colour carries the honesty distinction: anything a source ties to a real
+ * interview reads green-ish, anything we wrote ourselves reads neutral. A user
+ * should be able to tell the difference without reading the label.
+ */
+export const DD_SOURCE_CLASS: Record<string, string> = {
+  REAL_INTERVIEW: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  INTERVIEW_EXPERIENCE: "border-teal-500/30 bg-teal-500/10 text-teal-400",
+  CASEBOOK_INTERVIEW_CASE: "border-violet-500/30 bg-violet-500/10 text-violet-400",
+  COMMON_INTERVIEW_QUESTION: "border-sky-500/30 bg-sky-500/10 text-sky-400",
+  ADAPTED_PRACTICE: "border-border bg-secondary text-muted-foreground",
+};
+
+export const DD_TYPE_LABEL: Record<string, string> = {
+  CONCEPT: "Concept",
+  QUESTION: "Question",
+  CASE: "Case",
+  GUESSTIMATE: "Guesstimate",
+  INDUSTRY_PRIMER: "Industry primer",
+};
+
+export const DD_DOMAIN_CLASS: Record<string, string> = {
+  DATA: "bg-sky-500/15 text-sky-400 border-sky-500/25",
+  PRODUCT: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
+  CONSULTING: "bg-amber-500/15 text-amber-400 border-amber-500/25",
+};

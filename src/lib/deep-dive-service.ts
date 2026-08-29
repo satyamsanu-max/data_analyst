@@ -1,4 +1,3 @@
-import "server-only";
 import { prisma } from "./db";
 import { SECTION_BY_SLUG, SECTIONS, type Domain } from "@/data/deep-dive/types";
 
@@ -9,6 +8,12 @@ import { SECTION_BY_SLUG, SECTIONS, type Domain } from "@/data/deep-dive/types";
  * as `plan-service.ts` does. Nothing here reads or writes `Question`,
  * `UserProgress`, `DailyPlan`, `DailyTask` or `Attempt` — the Daily Practice
  * tables are untouched by this module by construction.
+ *
+ * Like `plan-service.ts`, and unlike `auth.ts`, this module deliberately omits
+ * the `server-only` marker. It touches no cookies and no Next-specific API, so
+ * the marker would buy nothing while preventing the smoke script from
+ * exercising these queries outside a request. Callers are all server
+ * components and server actions.
  */
 
 export type ProgressStatus = "NOT_STARTED" | "ATTEMPTED" | "SOLVED" | "NEEDS_REVIEW";

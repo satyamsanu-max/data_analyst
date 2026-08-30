@@ -1,15 +1,15 @@
 // Interview Prep — data model
-// PostgreSQL for production / Neon.
-// DATABASE_URL is loaded from .env or Vercel environment variables.
+// SQLite for local dev. `scripts/set-provider.mjs` swaps this to "postgresql"
+// (and adds directUrl) automatically when DATABASE_URL is a postgres:// URL —
+// see that script for why. No model changes needed either way.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider  = "sqlite"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 /// A reference we cite for a question (NeetCode, Striver, LeetCode, GfG, ...).

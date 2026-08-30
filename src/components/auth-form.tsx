@@ -63,7 +63,7 @@ export function AuthForm({
   return (
     <div className="mx-auto w-full max-w-sm">
       <div className="mb-8 text-center">
-        <div className="text-sm font-semibold tracking-tight">Interview Prep</div>
+        <div className="text-sm font-semibold tracking-tight">LYFF</div>
         <div className="text-xs text-muted-foreground">Data Analyst / Data Science</div>
       </div>
 

@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/nav";
 import { getCurrentUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "Interview Prep — Data Analyst / Data Science",
+  title: "LYFF — Late Your Fate Forward",
   description:
     "A daily, time-budgeted interview preparation system. Maximum preparation value per 150 minutes.",
 };

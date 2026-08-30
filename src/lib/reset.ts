@@ -93,7 +93,7 @@ export function resetUrl(token: string): string {
 export async function sendResetEmail(email: string, token: string): Promise<void> {
   const url = resetUrl(token);
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESET_EMAIL_FROM ?? "Interview Prep <onboarding@resend.dev>";
+  const from = process.env.RESET_EMAIL_FROM ?? "LYFF <onboarding@resend.dev>";
 
   if (!apiKey) {
     console.warn(
@@ -111,7 +111,7 @@ export async function sendResetEmail(email: string, token: string): Promise<void
     body: JSON.stringify({
       from,
       to: [email],
-      subject: "Reset your Interview Prep password",
+      subject: "Reset your LYFF password",
       text: [
         "Someone asked to reset the password for this account.",
         "",

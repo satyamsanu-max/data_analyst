@@ -4,7 +4,7 @@ import { listContent, sectionFacets, sectionSummaries } from "@/lib/deep-dive-se
 import { Badge, Meter } from "@/components/ui";
 import { ContentList, FilterChips } from "@/components/deep-dive/content-list";
 import { ModeTabs, TopicRail } from "@/components/deep-dive/topic-rail";
-import { SECTION_BY_SLUG, DOMAIN_LABEL } from "@/data/deep-dive/types";
+import { SECTION_BY_SLUG, DOMAIN_LABEL, DOMAINS, type Domain } from "@/data/deep-dive/types";
 import { DD_DOMAIN_CLASS } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +17,19 @@ export const dynamic = "force-dynamic";
 export default async function LearnPage({
   searchParams,
 }: {
-  searchParams: Promise<{ topic?: string; category?: string; difficulty?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
   const user = await requireUserPage("/deep-dive/learn");
   const sections = await sectionSummaries(user.id);
 
-  const withConcepts = sections.filter((s) => s.conceptTotal > 0);
+  // A sidebar entry scopes the page to one stream (Product Management,
+  // Consulting or Data); without one we show everything, as before.
+  const domain = DOMAINS.includes(sp.domain as Domain) ? (sp.domain as Domain) : undefined;
+
+  const withConcepts = sections.filter(
+    (s) => s.conceptTotal > 0 && (!domain || s.domain === domain),
+  );
   const topic =
     sp.topic && SECTION_BY_SLUG[sp.topic] && withConcepts.some((s) => s.slug === sp.topic)
       ? sp.topic
@@ -42,14 +48,14 @@ export default async function LearnPage({
 
   const link = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries({ ...sp, topic, ...patch })) if (v) p.set(k, v);
+    for (const [k, v] of Object.entries({ ...sp, topic, domain, ...patch })) if (v) p.set(k, v);
     return `/deep-dive/learn?${p.toString()}`;
   };
 
   return (
     <div className="space-y-5">
       <div>
-        <div className="stat-label">Deep Dive</div>
+        <div className="stat-label">{domain ? DOMAIN_LABEL[domain] : "Deep Dive"}</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">Learn</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Understand the idea first — what it is, how it works, when to use it, and the mistake
@@ -57,10 +63,10 @@ export default async function LearnPage({
         </p>
       </div>
 
-      <ModeTabs mode="learn" topic={topic} />
+      <ModeTabs mode="learn" topic={topic} domain={domain} />
 
       <div className="grid gap-5 lg:grid-cols-[15rem_1fr]">
-        <TopicRail sections={sections} active={topic} mode="learn" />
+        <TopicRail sections={sections} active={topic} mode="learn" domain={domain} />
 
         <div className="min-w-0 space-y-4">
           <div className="surface p-4">
@@ -79,7 +85,7 @@ export default async function LearnPage({
               </span>
               {current.questionTotal > 0 && (
                 <Link
-                  href={`/deep-dive/practice?topic=${topic}`}
+                  href={`/deep-dive/practice?topic=${topic}${domain ? `&domain=${domain}` : ""}`}
                   className="text-xs text-primary hover:underline"
                 >
                   {current.questionTotal} questions →

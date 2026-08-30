@@ -13,23 +13,36 @@ export type RailSection = {
   questionDone: number;
 };
 
+/** Preserve the domain across Learn/Practice/topic links, when one is scoped. */
+function href(mode: "learn" | "practice", topic: string, domain?: Domain) {
+  const q = new URLSearchParams({ topic });
+  if (domain) q.set("domain", domain);
+  return `/deep-dive/${mode}?${q.toString()}`;
+}
+
 /**
  * The topic switcher that sits beside the Learn and Practice lists.
  *
  * The whole point of this layout is that choosing a topic does not cost a page
  * of its own: the rail and the content sit side by side, so reaching an item is
  * two clicks from the sidebar rather than four.
+ *
+ * When `domain` is set the rail shows only that stream's topics, because the
+ * sidebar now enters Product Management, Consulting and Data separately — a
+ * consultant should not have to scroll past Power BI to find market entry.
  */
 export function TopicRail({
   sections,
   active,
   mode,
+  domain,
 }: {
   sections: RailSection[];
   active: string;
   mode: "learn" | "practice";
+  domain?: Domain;
 }) {
-  const domains: Domain[] = ["DATA", "PRODUCT", "CONSULTING"];
+  const domains: Domain[] = domain ? [domain] : ["DATA", "PRODUCT", "CONSULTING"];
   const relevant = sections.filter((s) =>
     mode === "learn" ? s.conceptTotal > 0 : s.questionTotal > 0,
   );
@@ -49,7 +62,7 @@ export function TopicRail({
               return (
                 <Link
                   key={s.slug}
-                  href={`/deep-dive/${mode}?topic=${s.slug}`}
+                  href={href(mode, s.slug, domain)}
                   className={cn(
                     "block rounded-md px-2 py-1.5 transition-colors",
                     isActive ? "bg-secondary" : "hover:bg-accent",
@@ -82,7 +95,15 @@ export function TopicRail({
 }
 
 /** The Learn / Practice switch, shown above the content on both pages. */
-export function ModeTabs({ mode, topic }: { mode: "learn" | "practice"; topic: string }) {
+export function ModeTabs({
+  mode,
+  topic,
+  domain,
+}: {
+  mode: "learn" | "practice";
+  topic: string;
+  domain?: Domain;
+}) {
   const tabs = [
     { key: "learn" as const, label: "Learn", blurb: "Concepts" },
     { key: "practice" as const, label: "Practice", blurb: "Interview questions" },
@@ -92,7 +113,7 @@ export function ModeTabs({ mode, topic }: { mode: "learn" | "practice"; topic: s
       {tabs.map((t) => (
         <Link
           key={t.key}
-          href={`/deep-dive/${t.key}?topic=${topic}`}
+          href={href(t.key, topic, domain)}
           className={cn(
             "flex-1 rounded-md border px-4 py-2.5 transition-colors",
             mode === t.key

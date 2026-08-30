@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui";
@@ -20,10 +20,18 @@ const NAV = [
   { href: "/bank/ml", label: "ML" },
   { href: "/bank/python", label: "Python" },
   { href: "/bank/guesstimate", label: "Guesstimates" },
+  { section: "Product Management" },
+  { href: "/deep-dive/learn?domain=PRODUCT", label: "Learn" },
+  { href: "/deep-dive/practice?domain=PRODUCT", label: "Practice" },
+  { section: "Consulting" },
+  { href: "/deep-dive/learn?domain=CONSULTING", label: "Learn" },
+  { href: "/deep-dive/practice?domain=CONSULTING", label: "Practice" },
+  { section: "Data — Interview Part 2" },
+  { href: "/deep-dive/learn?domain=DATA", label: "Learn" },
+  { href: "/deep-dive/practice?domain=DATA", label: "Practice" },
   { section: "Deep Dive" },
-  { href: "/deep-dive/learn", label: "Learn" },
-  { href: "/deep-dive/practice", label: "Practice" },
-  { href: "/deep-dive/progress", label: "Deep Dive Progress" },
+  { href: "/deep-dive", label: "All streams" },
+  { href: "/deep-dive/progress", label: "Progress" },
   { href: "/deep-dive/search", label: "Search" },
   { section: "Insight" },
   { href: "/progress", label: "Progress" },
@@ -60,13 +68,23 @@ export function Sidebar({
   user: NavUser;
 }) {
   const pathname = usePathname();
+  const params = useSearchParams();
   const [open, setOpen] = useState(false);
+
+  /**
+   * Three sidebar entries now point at /deep-dive/learn, differing only by
+   * ?domain=. Matching on pathname alone would light all three up at once, so
+   * the domain has to be part of the comparison.
+   */
+  const current = `${pathname}${params.get("domain") ? `?domain=${params.get("domain")}` : ""}`;
+  const isActive = (href: string) =>
+    href.includes("?") ? current === href : pathname === href && !params.get("domain");
 
   return (
     <>
       <div className="flex items-center justify-between border-b border-border p-4 lg:hidden">
         <Link href="/" className="text-sm font-semibold">
-          Interview Prep
+          LYFF
         </Link>
         <Button variant="outline" size="sm" onClick={() => setOpen((o) => !o)}>
           Menu
@@ -81,8 +99,8 @@ export function Sidebar({
       >
         <div className="flex h-full flex-col p-4">
           <Link href="/" className="mb-6 hidden px-2 lg:block">
-            <div className="text-sm font-semibold tracking-tight">Interview Prep</div>
-            <div className="text-xs text-muted-foreground">Data Analyst / DS</div>
+            <div className="text-sm font-semibold tracking-tight">LYFF</div>
+            <div className="text-xs text-muted-foreground">Late Your Fate Forward</div>
           </Link>
 
           <nav className="flex-1 space-y-0.5 overflow-y-auto">
@@ -98,7 +116,7 @@ export function Sidebar({
                   onClick={() => setOpen(false)}
                   className={cn(
                     "block rounded-md px-3 py-1.5 text-sm transition-colors",
-                    pathname === item.href
+                    isActive(item.href)
                       ? "bg-secondary font-medium text-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
